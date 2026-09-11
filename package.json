@@ -19,10 +19,10 @@
     "test:core": "esbuild scratch/verify-core-issues.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/aero-verify-core-issues.js && electron /tmp/aero-verify-core-issues.js",
     "test:runtime": "electron scratch/verify-full-runtime.js",
     "start": "npm run build && electron .",
-    "package:mac": "npm run build && electron-builder --mac --dir",
-    "dist:mac": "npm run build && electron-builder --mac dmg",
-    "package:win": "npm run build && electron-builder --win --x64 --dir",
-    "dist:win": "npm run build && electron-builder --win nsis --x64"
+    "package:mac": "npm run build && electron-builder --mac --dir --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
+    "package:win": "npm run build && electron-builder --win --x64 --dir --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never"
   },
   "build": {
     "appId": "com.aero.browser",
@@ -34,14 +34,24 @@
       "provider": "github",
       "owner": "jun1301",
       "repo": "aero-browser-releases",
-      "releaseType": "draft"
+      "releaseType": "release"
     },
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
     ],
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64"]
+        }
+      ]
     },
     "win": {
       "target": [
