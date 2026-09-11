@@ -40,6 +40,15 @@ export interface DownloadItemInfo {
   sourceHostname?: string;
 }
 
+export interface InstalledExtension {
+  id: string;
+  name: string;
+  version: string;
+  path: string;
+  description?: string;
+  manifestVersion?: number;
+}
+
 export interface PermissionPrompt {
   requestId: string;
   origin: string;

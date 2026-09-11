@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { HistoryItem, SearchHistoryItem, BookmarkItem, ClosedTab, DownloadItemInfo, BrowserSettings, FavoriteItem, ClearDataOptions, Workspace, PermissionPrompt, UpdateStatus } from './types';
+import { HistoryItem, SearchHistoryItem, BookmarkItem, ClosedTab, DownloadItemInfo, BrowserSettings, FavoriteItem, ClearDataOptions, Workspace, PermissionPrompt, UpdateStatus, InstalledExtension } from './types';
 
 export interface ElectronAPI {
   minimizeWindow: () => void;
@@ -67,6 +67,11 @@ export interface ElectronAPI {
   downloadUpdate: () => Promise<UpdateStatus>;
   installUpdate: () => void;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
+
+  // Unpacked Chrome extensions (normal persistent session only)
+  listExtensions: () => Promise<InstalledExtension[]>;
+  installExtension: () => Promise<{ ok: boolean; extension?: InstalledExtension; error?: string }>;
+  removeExtension: (id: string) => Promise<boolean>;
 
   // AdBlock
   getAdBlockStats: () => Promise<{ enabled: boolean; blockedCount: number }>;
@@ -220,6 +225,10 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('app:update-status', sub);
     return () => ipcRenderer.removeListener('app:update-status', sub);
   },
+
+  listExtensions: () => ipcRenderer.invoke('extensions:list'),
+  installExtension: () => ipcRenderer.invoke('extensions:install'),
+  removeExtension: (id) => ipcRenderer.invoke('extensions:remove', id),
 
   getAdBlockStats: () => ipcRenderer.invoke('adblock:getStats'),
   toggleAdBlock: (enabled) => ipcRenderer.invoke('adblock:toggle', enabled),

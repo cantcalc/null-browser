@@ -11,6 +11,7 @@ import { ClearDataOptions, Workspace } from './types';
 import { normalizeTranslationError, TRANSLATION_LIMITS, TranslationError } from './translation';
 import { clearOriginStorage } from './siteData';
 import { UpdateManager } from './Updater';
+import { ExtensionManager } from './ExtensionManager';
 
 let mainWindow: BrowserWindow | null = null;
 const allWindows: Set<BrowserWindow> = new Set();
@@ -19,6 +20,7 @@ const dataManager = new DataManager();
 const downloadManager = new DownloadManager();
 const permissionManager = new PermissionManager(dataManager);
 const updateManager = new UpdateManager();
+const extensionManager = new ExtensionManager();
 const adBlockSessions = new WeakSet<Electron.Session>();
 const downloadSessions = new WeakSet<Electron.Session>();
 const cookiePolicySessions = new WeakSet<Electron.Session>();
@@ -631,6 +633,32 @@ ipcMain.handle('window:isMaximized', (event) => {
 ipcMain.handle('app:update-check', () => updateManager.checkForUpdates());
 ipcMain.handle('app:update-download', () => updateManager.downloadUpdate());
 ipcMain.on('app:update-install', () => updateManager.installUpdate());
+
+ipcMain.handle('extensions:list', () => extensionManager.list());
+ipcMain.handle('extensions:install', async (event) => {
+  const ownerWindow = getWindowForWebContents(event.sender);
+  const dialogOptions: Electron.OpenDialogOptions = {
+    title: 'Chrome 확장 프로그램 폴더 선택',
+    properties: ['openDirectory'],
+    message: 'manifest.json이 들어 있는 압축 해제된 확장 프로그램 폴더를 선택하세요.',
+  };
+  const result = ownerWindow
+    ? await dialog.showOpenDialog(ownerWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
+  if (result.canceled || result.filePaths.length === 0) {
+    return { ok: false, error: 'cancelled' };
+  }
+
+  try {
+    const extension = await extensionManager.install(result.filePaths[0]);
+    return { ok: true, extension };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '확장 프로그램을 설치하지 못했습니다.';
+    console.error('[extensions] Install failed:', error);
+    return { ok: false, error: message };
+  }
+});
+ipcMain.handle('extensions:remove', (_event, extensionId: string) => extensionManager.remove(extensionId));
 
 // WebContentsView Native TabManager IPC
 function getWinTabManager(sender: Electron.WebContents): TabManager | undefined {
@@ -1346,10 +1374,11 @@ if (!gotTheLock) {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!gotTheLock) return;
   dataManager.markRunStarted();
   updateManager.initialize();
+  await extensionManager.initialize();
   setupApplicationMenu();
   const initialUrl = pendingOpenUrl || process.argv.find(isBrowserUrl);
   pendingOpenUrl = null;

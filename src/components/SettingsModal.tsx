@@ -14,16 +14,17 @@ import {
   Wind,
   Copy,
   RotateCcw,
+  Puzzle,
 } from 'lucide-react';
 import { BrowserSettings, SearchEngine, ClearDataOptions } from '../types/browser';
 import { ACCENT_OPTIONS, getAccentForeground, getThemeOption, THEME_OPTIONS } from '../constants/appearance';
-import type { UpdateStatus } from '../../electron/types';
+import type { InstalledExtension, UpdateStatus } from '../../electron/types';
 
 interface SettingsModalProps {
   isOpen: boolean;
   settings: BrowserSettings;
   blockedCount: number;
-  initialTab?: 'general' | 'search' | 'appearance' | 'privacy' | 'shortcuts' | 'about';
+  initialTab?: 'general' | 'search' | 'appearance' | 'privacy' | 'extensions' | 'shortcuts' | 'about';
   onClose: () => void;
   onUpdateSettings: (updates: Partial<BrowserSettings>) => void;
   onResetSettings?: () => void;
@@ -44,7 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onBookmarksChanged,
   onPermissionsChanged,
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'search' | 'appearance' | 'privacy' | 'shortcuts' | 'about'>(
+  const [activeTab, setActiveTab] = useState<'general' | 'search' | 'appearance' | 'privacy' | 'extensions' | 'shortcuts' | 'about'>(
     initialTab
   );
 
@@ -88,6 +89,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
+  const [extensionsLoading, setExtensionsLoading] = useState(false);
+  const [extensionBusy, setExtensionBusy] = useState(false);
+  const [extensionError, setExtensionError] = useState<string | null>(null);
   const [permissionEntries, setPermissionEntries] = useState<Record<string, Record<string, 'allow' | 'deny'>>>({});
   const [permissionSearch, setPermissionSearch] = useState('');
   const [permissionFilter, setPermissionFilter] = useState('all');
@@ -141,6 +146,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     if (isOpen && activeTab === 'privacy') void loadPrivacyData();
   }, [isOpen, activeTab]);
+
+  const loadExtensions = async () => {
+    if (!window.electronAPI) return;
+    setExtensionsLoading(true);
+    setExtensionError(null);
+    try {
+      setExtensions(await window.electronAPI.listExtensions());
+    } catch (error) {
+      setExtensionError(error instanceof Error ? error.message : '확장 프로그램 목록을 불러오지 못했습니다.');
+    } finally {
+      setExtensionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'extensions') void loadExtensions();
+  }, [isOpen, activeTab]);
+
+  const handleInstallExtension = async () => {
+    if (!window.electronAPI) return;
+    setExtensionBusy(true);
+    setExtensionError(null);
+    try {
+      const result = await window.electronAPI.installExtension();
+      if (result.ok) {
+        await loadExtensions();
+      } else if (result.error && result.error !== 'cancelled') {
+        setExtensionError(result.error);
+      }
+    } catch (error) {
+      setExtensionError(error instanceof Error ? error.message : '확장 프로그램을 설치하지 못했습니다.');
+    } finally {
+      setExtensionBusy(false);
+    }
+  };
+
+  const handleRemoveExtension = async (extension: InstalledExtension) => {
+    if (!window.electronAPI || !confirm(`'${extension.name}' 확장 프로그램을 제거할까요?`)) return;
+    setExtensionBusy(true);
+    setExtensionError(null);
+    try {
+      await window.electronAPI.removeExtension(extension.id);
+      await loadExtensions();
+    } catch (error) {
+      setExtensionError(error instanceof Error ? error.message : '확장 프로그램을 제거하지 못했습니다.');
+    } finally {
+      setExtensionBusy(false);
+    }
+  };
 
   const setGlobalPermission = async (origin: string, permission: string, decision: 'allow' | 'deny' | 'default') => {
     if (!window.electronAPI) return;
@@ -449,6 +503,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <Shield className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="max-[640px]:hidden">개인정보 및 백업</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('extensions')}
+              title="확장 프로그램"
+              aria-label="확장 프로그램"
+              data-active={activeTab === 'extensions'}
+              className={`aero-settings-nav-item w-full flex items-center gap-2.5 px-3 py-2 max-[640px]:justify-center max-[640px]:px-2 text-left font-medium transition-colors ${
+                activeTab === 'extensions'
+                  ? 'bg-[var(--chrome-surface-active)] text-[var(--accent)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--chrome-surface-hover)]'
+              }`}
+            >
+              <Puzzle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="max-[640px]:hidden">확장 프로그램</span>
             </button>
             <button
               onClick={() => setActiveTab('shortcuts')}
@@ -1099,6 +1167,82 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
               </>
+            )}
+
+            {/* 5. Extensions Tab */}
+            {activeTab === 'extensions' && (
+              <div className="space-y-4">
+                <div>
+                  <div className="font-semibold text-[var(--text-primary)]">확장 프로그램</div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                    압축 해제된 Chrome 확장 프로그램 폴더를 설치합니다. 폴더 안에 manifest.json이 있어야 합니다.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--chrome-bg)] space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium text-[var(--text-primary)]">확장 프로그램 폴더 추가</div>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                        Chrome 웹 스토어의 .crx 파일은 직접 설치할 수 없습니다. 파일을 내려받아 압축을 푼 폴더를 선택하세요.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleInstallExtension}
+                      disabled={extensionBusy}
+                      className="aero-primary-button shrink-0 px-3 py-1.5 text-[11px] disabled:opacity-50"
+                    >
+                      {extensionBusy ? '처리 중...' : '폴더 선택'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
+                    확장 프로그램은 일반 창에서만 사용됩니다. 현재 비공개 창에는 확장 프로그램을 로드하지 않습니다.
+                  </p>
+                </div>
+
+                {extensionError && (
+                  <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300">
+                    {extensionError}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                    <span>설치된 확장 프로그램</span>
+                    {extensionsLoading && <span>불러오는 중…</span>}
+                  </div>
+                  {!extensionsLoading && extensions.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-[var(--border-subtle)] px-3 py-5 text-center text-[11px] text-[var(--text-muted)]">
+                      설치된 확장 프로그램이 없습니다.
+                    </div>
+                  )}
+                  {extensions.map((extension) => (
+                    <div
+                      key={extension.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--chrome-bg)] p-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-medium text-[var(--text-primary)]">{extension.name}</div>
+                        <div className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                          v{extension.version}{extension.manifestVersion ? ` · Manifest V${extension.manifestVersion}` : ''}
+                        </div>
+                        <div className="mt-1 truncate font-mono text-[10px] text-[var(--text-muted)]" title={extension.path}>
+                          {extension.path}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveExtension(extension)}
+                        disabled={extensionBusy}
+                        className="shrink-0 rounded-[var(--radius-md)] border border-rose-500/20 px-2.5 py-1.5 text-[11px] text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
+                      >
+                        제거
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* 5. Shortcuts Tab */}
