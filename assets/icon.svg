@@ -1,26 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0d1824"/>
-      <stop offset="0.55" stop-color="#172a3b"/>
-      <stop offset="1" stop-color="#0a111a"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0.15" y1="0.1" x2="0.88" y2="0.9">
-      <stop offset="0" stop-color="#8af4df"/>
-      <stop offset="0.48" stop-color="#5acfe5"/>
-      <stop offset="1" stop-color="#7599ff"/>
-    </linearGradient>
-    <linearGradient id="highlight" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/>
-      <stop offset="1" stop-color="#d8f8ff" stop-opacity="0.66"/>
-    </linearGradient>
-  </defs>
+  <rect width="1024" height="1024" rx="228" fill="#08090b"/>
+  <rect x="34" y="34" width="956" height="956" rx="198" fill="none" stroke="#ffffff" stroke-opacity="0.2" stroke-width="8"/>
 
-  <rect width="1024" height="1024" rx="224" fill="url(#background)"/>
-  <rect x="32" y="32" width="960" height="960" rx="200" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="8"/>
-  <path d="M202 314c82-92 192-142 310-142 126 0 237 55 316 154" fill="none" stroke="#bdfcf0" stroke-opacity="0.2" stroke-width="18" stroke-linecap="round"/>
+  <!-- A restrained orbit gives the mark its Aero identity without adding another colour. -->
+  <path d="M197 345c82-111 190-171 315-171 127 0 239 61 315 174" fill="none" stroke="#ffffff" stroke-opacity="0.2" stroke-width="14" stroke-linecap="round"/>
 
-  <path fill="url(#accent)" fill-rule="evenodd" d="M512 174c-45 0-86 25-108 66L188 748h164l52-98h216l52 98h164L620 240c-22-41-63-66-108-66Zm0 174 72 202H440l72-202Z"/>
-  <path d="M404 650h216" stroke="url(#highlight)" stroke-opacity="0.52" stroke-width="16" stroke-linecap="round"/>
-  <circle cx="512" cy="168" r="14" fill="#ffffff" fill-opacity="0.86"/>
+  <!-- Geometric A: white outer form, black counter, and a quiet silver crossbar. -->
+  <path fill="#f7f7f3" fill-rule="evenodd" d="M512 208c-40 0-76 23-95 59L238 728h151l48-91h150l48 91h151L607 267c-19-36-55-59-95-59Zm0 155 55 159H457l55-159Z"/>
+  <path d="M407 631h210" stroke="#08090b" stroke-width="22" stroke-linecap="round"/>
 </svg>
