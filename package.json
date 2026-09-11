@@ -4,7 +4,7 @@
   "description": "Minimal Electron desktop browser with native tabs, translation, and host-based blocking",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jun1301/aero-browser.git"
+    "url": "https://github.com/cantcalc/aero-browser.git"
   },
   "main": "dist-electron/main.js",
   "scripts": {
@@ -32,7 +32,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "jun1301",
+      "owner": "cantcalc",
       "repo": "aero-browser-releases",
       "releaseType": "release"
     },
