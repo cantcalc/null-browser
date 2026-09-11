@@ -40,6 +40,12 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "assets/app-update.yml",
+        "to": "app-update.yml"
+      }
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",

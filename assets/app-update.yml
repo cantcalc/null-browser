@@ -1,0 +1,4 @@
+provider: github
+owner: jun1301
+repo: aero-browser-releases
+releaseType: release
