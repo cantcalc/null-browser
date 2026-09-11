@@ -1,0 +1,46 @@
+# Dependencies and generated application output
+node_modules/
+dist/
+dist-electron/
+release/
+out/
+build/
+
+# Installer and updater artifacts (publish these through GitHub Releases)
+*.dmg
+*.exe
+*.msi
+*.zip
+*.blockmap
+latest*.yml
+app-update.yml
+
+# Local configuration and secrets
+.env
+.env.*
+.npmrc
+*.log
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Local browser profiles, downloads, and crash/runtime data
+userData/
+userdata/
+test-user-data/
+test-userdata/
+tmp/
+temp/
+*.dmp
+*.ips
+*.crash
+*.part
+*.download

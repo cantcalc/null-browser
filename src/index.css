@@ -1,0 +1,1013 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* 1. Noir monochrome palette (default: black surface + white accent) */
+    --chrome-bg: #050505;
+    --chrome-toolbar: #0b0b0c;
+    --chrome-surface: #151516;
+    --chrome-surface-hover: rgba(255, 255, 255, 0.07);
+    --chrome-surface-active: #222224;
+
+    --border-subtle: rgba(255, 255, 255, 0.09);
+    --border-active: rgba(255, 255, 255, 0.2);
+    --border-divider: rgba(255, 255, 255, 0.06);
+
+    --text-primary: #f5f5f5;
+    --text-secondary: #b8b8bd;
+    --text-muted: #77777f;
+
+    --accent: #ffffff;
+    --accent-subtle: rgba(255, 255, 255, 0.14);
+    --accent-border: rgba(255, 255, 255, 0.34);
+    --accent-foreground: #111827;
+
+    --danger: #ef4444;
+    --danger-subtle: rgba(239, 68, 68, 0.12);
+
+    --radius-sm: 8px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+    --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.18);
+    --shadow-popover: 0 18px 48px rgba(0, 0, 0, 0.34);
+
+    --motion-instant: 80ms;
+    --motion-fast: 120ms;
+    --motion-normal: 160ms;
+    --motion-panel: 200ms;
+    --motion-color: 180ms;
+    --ease-aero: cubic-bezier(0.2, 0.72, 0.28, 1);
+    --ease-aero-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* Connected Chrome derives from the selected Aero theme and accent. */
+    --chrome-connected: color-mix(in srgb, var(--chrome-toolbar) 95%, var(--accent) 5%);
+    --chrome-lift: color-mix(in srgb, var(--chrome-surface) 94%, white 6%);
+    --chrome-well: color-mix(in srgb, var(--chrome-bg) 91%, var(--chrome-surface) 9%);
+    --content-bg: color-mix(in srgb, var(--chrome-bg) 98%, var(--accent) 2%);
+  }
+
+  /* Graphite keeps the original neutral slate identity. It used to fall
+     through to Noir because the theme selector was missing entirely. */
+  [data-theme="graphite"] {
+    --chrome-bg: #15171c;
+    --chrome-toolbar: #1b1e24;
+    --chrome-surface: #252932;
+    --chrome-surface-active: #303641;
+    --chrome-surface-hover: rgba(203, 213, 225, 0.08);
+    --border-subtle: rgba(203, 213, 225, 0.12);
+    --border-active: rgba(203, 213, 225, 0.24);
+    --border-divider: rgba(203, 213, 225, 0.08);
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #7f8a9b;
+  }
+
+  /* 2. Midnight Navy Palette (Rich Deep Ocean) */
+  [data-theme="midnight"] {
+    --chrome-bg: #070d18;
+    --chrome-toolbar: #0c1527;
+    --chrome-surface: #13213a;
+    --chrome-surface-active: #1a2c4e;
+    --chrome-surface-hover: rgba(59, 130, 246, 0.08);
+    --border-subtle: rgba(96, 165, 250, 0.14);
+    --border-active: rgba(96, 165, 250, 0.28);
+    --border-divider: rgba(96, 165, 250, 0.08);
+    --text-primary: #f0f7ff;
+    --text-secondary: #93c5fd;
+    --text-muted: #4b6b94;
+  }
+
+  /* 3. Forest Emerald Palette (Deep Botanical) */
+  [data-theme="forest"] {
+    --chrome-bg: #061510;
+    --chrome-toolbar: #0a1f18;
+    --chrome-surface: #102e23;
+    --chrome-surface-active: #173f30;
+    --chrome-surface-hover: rgba(16, 185, 129, 0.08);
+    --border-subtle: rgba(52, 211, 153, 0.15);
+    --border-active: rgba(52, 211, 153, 0.3);
+    --border-divider: rgba(52, 211, 153, 0.08);
+    --text-primary: #ecfdf5;
+    --text-secondary: #6ee7b7;
+    --text-muted: #3d6e5c;
+  }
+
+  /* 4. Aurora Violet Palette (Deep Velvet Purple) */
+  [data-theme="aurora"] {
+    --chrome-bg: #11091c;
+    --chrome-toolbar: #180e28;
+    --chrome-surface: #24153b;
+    --chrome-surface-active: #321e52;
+    --chrome-surface-hover: rgba(168, 85, 247, 0.08);
+    --border-subtle: rgba(192, 132, 252, 0.15);
+    --border-active: rgba(192, 132, 252, 0.3);
+    --border-divider: rgba(192, 132, 252, 0.08);
+    --text-primary: #faf5ff;
+    --text-secondary: #d8b4fe;
+    --text-muted: #6f508a;
+  }
+
+  /* 5. Sunset Warm Amber Palette (Cozy Warm Charcoal) */
+  [data-theme="sunset"] {
+    --chrome-bg: #181310;
+    --chrome-toolbar: #221b16;
+    --chrome-surface: #2d241d;
+    --chrome-surface-active: #3d3128;
+    --chrome-surface-hover: rgba(245, 158, 11, 0.08);
+    --border-subtle: rgba(251, 191, 36, 0.15);
+    --border-active: rgba(251, 191, 36, 0.3);
+    --border-divider: rgba(251, 191, 36, 0.08);
+    --text-primary: #fffbeb;
+    --text-secondary: #fde68a;
+    --text-muted: #7c6856;
+  }
+
+  /* 6. OLED Pure Black */
+  [data-theme="oled"] {
+    --chrome-bg: #000000;
+    --chrome-toolbar: #080808;
+    --chrome-surface: #121212;
+    --chrome-surface-active: #1c1c1c;
+    --chrome-surface-hover: rgba(255, 255, 255, 0.06);
+    --border-subtle: rgba(255, 255, 255, 0.14);
+    --border-active: rgba(255, 255, 255, 0.28);
+    --border-divider: rgba(255, 255, 255, 0.08);
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #52525b;
+  }
+
+  /* 7. Snow Light Palette (Crisp Clean Light) */
+  [data-theme="light"] {
+    --chrome-bg: #f1f3f7;
+    --chrome-toolbar: #ffffff;
+    --chrome-surface: #ffffff;
+    --chrome-surface-active: #e2e6ee;
+    --chrome-surface-hover: rgba(0, 0, 0, 0.05);
+    --border-subtle: rgba(0, 0, 0, 0.08);
+    --border-active: rgba(0, 0, 0, 0.18);
+    --border-divider: rgba(0, 0, 0, 0.06);
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+  }
+
+  /* 8. Paper monochrome palette (white surface + ink accent) */
+  [data-theme="paper"] {
+    --chrome-bg: #ffffff;
+    --chrome-toolbar: #f7f8fa;
+    --chrome-surface: #ffffff;
+    --chrome-surface-active: #e9edf2;
+    --chrome-surface-hover: rgba(0, 0, 0, 0.05);
+    --border-subtle: rgba(15, 23, 42, 0.1);
+    --border-active: rgba(15, 23, 42, 0.2);
+    --border-divider: rgba(15, 23, 42, 0.07);
+    --text-primary: #111827;
+    --text-secondary: #475569;
+    --text-muted: #7c8798;
+  }
+
+  /* 9. Cobalt Steel palette */
+  [data-theme="cobalt"] {
+    --chrome-bg: #08111f;
+    --chrome-toolbar: #0d1b2f;
+    --chrome-surface: #142a48;
+    --chrome-surface-active: #1d3b63;
+    --chrome-surface-hover: rgba(34, 211, 238, 0.08);
+    --border-subtle: rgba(125, 211, 252, 0.15);
+    --border-active: rgba(125, 211, 252, 0.3);
+    --border-divider: rgba(125, 211, 252, 0.08);
+    --text-primary: #f0f9ff;
+    --text-secondary: #a5d8ef;
+    --text-muted: #5a7794;
+  }
+
+  /* 10. Clay Terracotta palette */
+  [data-theme="clay"] {
+    --chrome-bg: #1b1110;
+    --chrome-toolbar: #281916;
+    --chrome-surface: #38221e;
+    --chrome-surface-active: #4b2b25;
+    --chrome-surface-hover: rgba(251, 113, 133, 0.08);
+    --border-subtle: rgba(253, 164, 175, 0.15);
+    --border-active: rgba(253, 164, 175, 0.3);
+    --border-divider: rgba(253, 164, 175, 0.08);
+    --text-primary: #fff1f2;
+    --text-secondary: #fecdd3;
+    --text-muted: #927078;
+  }
+
+  /* 11. Mist Ice palette */
+  [data-theme="mist"] {
+    --chrome-bg: #eaf2f8;
+    --chrome-toolbar: #f8fbfd;
+    --chrome-surface: #ffffff;
+    --chrome-surface-active: #dbeafe;
+    --chrome-surface-hover: rgba(37, 99, 235, 0.06);
+    --border-subtle: rgba(30, 64, 175, 0.12);
+    --border-active: rgba(30, 64, 175, 0.22);
+    --border-divider: rgba(30, 64, 175, 0.08);
+    --text-primary: #10243e;
+    --text-secondary: #52677f;
+    --text-muted: #7c91a8;
+  }
+
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    margin: 0;
+    padding: 0;
+  }
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--chrome-bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 1px;
+}
+
+/* Aero visual language: one connected chrome surface, quiet controls, and small motion. */
+.aero-connected-chrome {
+  position: relative;
+  background: var(--chrome-connected);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--border-subtle) 70%, var(--accent) 30%);
+}
+
+.aero-connected-chrome::after {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  z-index: 40;
+  height: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.aero-tabbar,
+.aero-toolbar,
+.aero-workspacebar {
+  background: transparent;
+  border-color: transparent;
+}
+
+.aero-workspacebar {
+  min-height: 32px;
+  color: var(--text-secondary);
+}
+
+.aero-tabbar {
+  min-height: 40px;
+  background: color-mix(in srgb, var(--chrome-connected) 96%, var(--chrome-bg) 4%);
+}
+
+.aero-tab-strip {
+  overscroll-behavior-x: contain;
+  scroll-behavior: auto;
+  touch-action: pan-x;
+}
+
+.aero-toolbar {
+  min-height: 40px;
+  background: color-mix(in srgb, var(--chrome-connected) 92%, var(--chrome-bg) 8%);
+}
+
+.aero-bookmark-bar {
+  min-height: 28px;
+  border-top: 1px solid color-mix(in srgb, var(--border-divider) 75%, transparent);
+  background: color-mix(in srgb, var(--chrome-connected) 88%, var(--chrome-bg) 12%);
+}
+
+.aero-bookmark-item {
+  max-width: min(13rem, 24vw);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.aero-bookmark-item:hover {
+  background: var(--chrome-surface-hover);
+  color: var(--text-primary);
+}
+
+.aero-content-stage {
+  border-top: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border-divider) 90%);
+  background: var(--content-bg);
+}
+
+.aero-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.aero-icon-button:hover:not(:disabled) {
+  background: var(--chrome-surface-hover);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+.aero-icon-button:disabled {
+  opacity: 0.3;
+}
+
+.aero-quiet-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.aero-quiet-button:hover:not(:disabled) {
+  background: var(--chrome-surface-hover);
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.aero-quiet-button:disabled {
+  opacity: 0.4;
+}
+
+.aero-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-foreground, #fff);
+  transition: background-color 140ms ease, filter 140ms ease, opacity 140ms ease;
+}
+
+.aero-primary-button:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.aero-primary-button:disabled {
+  opacity: 0.4;
+}
+
+.aero-omnibox {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--chrome-well);
+  color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.aero-omnibox:hover {
+  border-color: var(--border-active);
+}
+
+.aero-omnibox:focus-within,
+.aero-omnibox[data-focused="true"] {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--chrome-well) 95%, var(--accent) 5%);
+  box-shadow: 0 0 0 2px var(--accent-subtle), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.aero-site-button {
+  transition: color 140ms ease;
+}
+
+.aero-site-button:hover {
+  color: var(--text-primary);
+}
+
+.aero-field {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--chrome-bg) 82%, white 18%);
+  color: var(--text-primary);
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.aero-field:hover {
+  border-color: var(--border-active);
+}
+
+.aero-field:focus-within {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.aero-tab {
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.aero-tab[data-active="true"] {
+  background: var(--chrome-lift);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.aero-tab:hover:not([data-active="true"]) {
+  background: var(--chrome-surface-hover);
+  color: var(--text-primary);
+}
+
+.aero-tab-close {
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.aero-tab[data-active="true"] .aero-tab-close {
+  opacity: 0;
+}
+
+.aero-tab:hover .aero-tab-close,
+.aero-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.aero-tab-close:hover {
+  background: var(--chrome-surface-hover);
+  color: var(--text-primary);
+}
+
+.aero-newtab-button {
+  margin-left: 1px;
+}
+
+.aero-popover,
+.aero-modal,
+.aero-panel {
+  background: var(--chrome-surface);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-popover);
+}
+
+.aero-overlay {
+  background: rgba(4, 7, 11, 0.58);
+  backdrop-filter: blur(12px);
+}
+
+.aero-panel-header {
+  background: color-mix(in srgb, var(--chrome-toolbar) 88%, transparent);
+  border-color: var(--border-divider);
+}
+
+.aero-panel-section {
+  background: color-mix(in srgb, var(--chrome-surface) 78%, var(--chrome-bg) 22%);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+}
+
+.aero-segment-bar {
+  background: color-mix(in srgb, var(--chrome-bg) 82%, var(--chrome-surface) 18%);
+  border-color: var(--border-divider);
+}
+
+.aero-aside {
+  box-shadow: -18px 0 42px rgba(0, 0, 0, 0.18);
+}
+
+.aero-segment {
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.aero-segment[data-active="true"] {
+  background: var(--chrome-surface-active);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.aero-list-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.aero-list-row:hover {
+  background: var(--chrome-surface-hover);
+  border-color: var(--border-subtle);
+}
+
+.aero-newtab-search {
+  min-height: 44px;
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--chrome-well) 88%, var(--chrome-surface) 12%);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.aero-newtab-search:focus-within {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--chrome-well) 95%, var(--accent) 5%);
+  box-shadow: 0 0 0 3px var(--accent-subtle), 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.aero-newtab {
+  background: var(--content-bg);
+}
+
+.aero-wordmark {
+  color: var(--text-primary);
+}
+
+.aero-logo-mark {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 28px;
+  color: var(--accent);
+}
+
+.aero-logo-stroke {
+  position: absolute;
+  right: 1px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 24%, transparent);
+  transform: skewX(-18deg);
+  transform-origin: right center;
+}
+
+.aero-logo-stroke::after {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.aero-logo-stroke-one {
+  top: 5px;
+  width: 25px;
+  opacity: 0.7;
+}
+
+.aero-logo-stroke-two {
+  top: 13px;
+  width: 39px;
+}
+
+.aero-logo-stroke-three {
+  top: 21px;
+  width: 31px;
+  opacity: 0.82;
+}
+
+.aero-favorite-tile,
+.aero-favorite-add,
+.aero-recent-row {
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.aero-favorite-tile:hover,
+.aero-recent-row:hover {
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--chrome-surface) 66%, transparent);
+}
+
+.aero-favorite-add {
+  border-style: dashed;
+  border-color: var(--border-subtle);
+}
+
+.aero-favorite-add:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.aero-state {
+  background: var(--chrome-bg);
+}
+
+/* Keep legacy utility classes on older screens inside the same radius scale. */
+.aero-app .rounded,
+.aero-app .rounded-sm {
+  border-radius: var(--radius-sm);
+}
+
+.aero-app .rounded-md {
+  border-radius: var(--radius-md);
+}
+
+.aero-app .rounded-lg,
+.aero-app .rounded-xl {
+  border-radius: var(--radius-lg);
+}
+
+  .aero-app .rounded-2xl {
+  border-radius: var(--radius-xl);
+}
+
+/* Final experience polish: central motion language and a connected chrome. */
+.aero-connected-chrome {
+  background: var(--chrome-connected);
+  box-shadow: none;
+  transition: background-color var(--motion-color) var(--ease-aero), color var(--motion-color) var(--ease-aero);
+}
+
+.aero-connected-chrome::after {
+  background: color-mix(in srgb, var(--border-divider) 80%, var(--accent) 20%);
+}
+
+.aero-workspacebar,
+.aero-tabbar,
+.aero-toolbar {
+  background: var(--chrome-connected);
+}
+
+.aero-workspacebar {
+  min-height: 32px;
+  opacity: 0.92;
+}
+
+.aero-tabbar {
+  min-height: 38px;
+}
+
+.aero-toolbar {
+  min-height: 40px;
+  border-top: 0;
+}
+
+.aero-content-stage {
+  border-top-color: color-mix(in srgb, var(--border-divider) 85%, transparent);
+}
+
+.aero-omnibox {
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--chrome-connected) 92%, var(--chrome-bg) 8%);
+  box-shadow: none;
+  transition: background-color var(--motion-normal) var(--ease-aero), border-color var(--motion-normal) var(--ease-aero), box-shadow var(--motion-normal) var(--ease-aero);
+}
+
+.aero-omnibox:hover {
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--chrome-connected) 88%, var(--chrome-bg) 12%);
+}
+
+.aero-omnibox:focus-within,
+.aero-omnibox[data-focused="true"] {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--chrome-connected) 84%, var(--chrome-surface) 16%);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+.aero-tab[data-active="true"] {
+  position: relative;
+  z-index: 1;
+  margin-bottom: -1px;
+  border-color: var(--border-subtle);
+  border-bottom-color: transparent;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: color-mix(in srgb, var(--chrome-connected) 78%, var(--chrome-surface-active) 22%);
+  box-shadow: none;
+  transition: background-color var(--motion-normal) var(--ease-aero), border-color var(--motion-normal) var(--ease-aero), color var(--motion-normal) var(--ease-aero);
+}
+
+.aero-tab:hover:not([data-active="true"]) {
+  background: color-mix(in srgb, var(--chrome-connected) 90%, var(--chrome-surface-hover) 10%);
+}
+
+.aero-tab-regular {
+  animation: aero-tab-enter var(--motion-normal) var(--ease-aero-out) both;
+}
+
+.aero-popover,
+.aero-modal {
+  animation: aero-layer-in var(--motion-panel) var(--ease-aero-out) both;
+}
+
+.aero-aside {
+  animation: aero-panel-in var(--motion-panel) var(--ease-aero-out) both;
+}
+
+.aero-list-row,
+.aero-icon-button,
+.aero-quiet-button,
+.aero-primary-button,
+.aero-segment,
+.aero-bookmark-item,
+.aero-settings-nav-item {
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-aero);
+}
+
+.aero-icon-button:active:not(:disabled),
+.aero-quiet-button:active:not(:disabled),
+.aero-primary-button:active:not(:disabled),
+.aero-list-row:active,
+.aero-segment:active,
+.aero-bookmark-item:active {
+  transform: scale(0.99);
+}
+
+.aero-newtab-search {
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  transition: background-color var(--motion-normal) var(--ease-aero), border-color var(--motion-normal) var(--ease-aero), box-shadow var(--motion-normal) var(--ease-aero);
+}
+
+.aero-newtab-search:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.aero-private .aero-connected-chrome {
+  background: color-mix(in srgb, var(--chrome-connected) 91%, #3c2f68 9%);
+}
+
+.aero-private .aero-content-stage,
+.aero-private .aero-newtab {
+  background: color-mix(in srgb, var(--content-bg) 92%, #17142c 8%);
+}
+
+.aero-private .aero-tab[data-active="true"] {
+  background: color-mix(in srgb, var(--chrome-connected) 70%, #40356e 30%);
+}
+
+@keyframes aero-layer-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes aero-panel-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes aero-tab-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.aero-settings [class*="rounded-xl"],
+.aero-settings [class*="rounded-2xl"] {
+  border-radius: var(--radius-lg);
+}
+
+.aero-settings [class*="border-[var(--border-subtle)]"] {
+  border-color: var(--border-subtle);
+}
+
+.aero-settings [class*="bg-[var(--chrome-bg)]"] {
+  background: color-mix(in srgb, var(--chrome-surface) 58%, var(--chrome-bg) 42%);
+}
+
+.aero-settings input:not([type="checkbox"]),
+.aero-settings textarea,
+.aero-settings select {
+  border-radius: var(--radius-md);
+}
+
+.aero-settings-nav {
+  background: color-mix(in srgb, var(--chrome-bg) 88%, var(--chrome-surface) 12%);
+}
+
+.aero-settings-nav-item {
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.aero-settings-nav-item[data-active="true"] {
+  background: var(--chrome-surface-active);
+  border-color: var(--border-subtle);
+  color: var(--accent);
+}
+
+/* Theme changes animate the browser chrome without applying transitions to
+   editable controls, which keeps address-bar typing and selection immediate. */
+.theme-transition,
+.theme-transition *:not(input):not(textarea):not(select) {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity, transform;
+  transition-duration: var(--motion-color);
+  transition-timing-function: var(--ease-aero);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-transition,
+  .theme-transition *:not(input):not(textarea):not(select) {
+    transition-duration: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+input, textarea {
+    user-select: text;
+    -webkit-user-select: text;
+    font-family: inherit;
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* A short but wide window cannot vertically center a full new-tab page
+   without hiding its first rows behind the native browser chrome. Keep the
+   top of the page reachable and let the page scroll in that ratio. */
+@media (max-height: 520px) {
+  .new-tab-page {
+    justify-content: flex-start;
+  }
+
+  .new-tab-content {
+    margin-top: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+}
+
+@media (max-width: 700px) {
+  .aero-home-button {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .aero-devtools-button {
+    display: none;
+  }
+
+  .aero-toolbar,
+  .aero-tabbar {
+    padding-right: 0.375rem;
+    padding-left: 0.375rem;
+  }
+}
+
+@media (max-height: 380px) {
+  .new-tab-page {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .new-tab-content {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+}
+
+@media (max-height: 520px) {
+  .command-palette-overlay {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .command-palette-list {
+    max-height: none;
+  }
+}
+
+@media (max-width: 320px) {
+  .find-bar {
+    left: 0.25rem;
+    right: 0.25rem;
+  }
+}
+
+/* macOS Window Dragging Regions */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-nodrag,
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Chrome scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-active);
+}
+
+/* Give the New Tab hero enough visual weight to anchor an otherwise quiet
+   page, while keeping the width and type fluid on small windows. */
+.new-tab-content {
+  width: min(100%, 40rem);
+}
+
+.aero-wordmark-title {
+  font-size: clamp(2rem, 3vw, 2.5rem);
+}
+
+.aero-logo-mark {
+  width: clamp(3.75rem, 6vw, 4.75rem);
+  height: clamp(2.5rem, 4vw, 3.25rem);
+}
+
+.aero-logo-stroke {
+  height: clamp(2px, 0.25vw, 3px);
+}
+
+.aero-logo-stroke::after {
+  top: clamp(-1px, -0.1vw, 0px);
+  width: clamp(4px, 0.45vw, 5px);
+  height: clamp(4px, 0.45vw, 5px);
+}
+
+.aero-logo-stroke-one {
+  top: 18%;
+  width: 62%;
+}
+
+.aero-logo-stroke-two {
+  top: 48%;
+  width: 96%;
+}
+
+.aero-logo-stroke-three {
+  top: 78%;
+  width: 76%;
+}
+
+.aero-newtab-search {
+  width: min(100%, 36rem);
+  min-height: clamp(3rem, 4.5vw, 3.5rem);
+  margin-right: auto;
+  margin-left: auto;
+  padding-right: clamp(1rem, 2vw, 1.375rem);
+  padding-left: clamp(1rem, 2vw, 1.375rem);
+  border-radius: var(--radius-xl);
+}
+
+.aero-newtab-search-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  margin-right: 0.75rem;
+}
+
+.aero-newtab-search-input {
+  font-size: clamp(0.8rem, 1.25vw, 0.95rem);
+}

@@ -1,0 +1,78 @@
+{
+  "name": "aero-browser",
+  "version": "1.0.0",
+  "description": "Minimal Electron desktop browser with native tabs, translation, and host-based blocking",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev:vite": "vite",
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --external:electron --outfile=dist-electron/main.js && esbuild electron/preload.ts --bundle --platform=node --external:electron --outfile=dist-electron/preload.js && esbuild electron/guestPreload.ts --bundle --platform=node --external:electron --outfile=dist-electron/guestPreload.js",
+    "build:vite": "vite build",
+    "build": "npm run build:vite && npm run build:electron",
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run build:electron && cross-env NODE_ENV=development electron .\"",
+    "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
+    "test:navigation": "node scratch/verify-navigation-parser.js",
+    "test:tabs": "electron scratch/verify-webcontentsview.js",
+    "test:core": "esbuild scratch/verify-core-issues.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/aero-verify-core-issues.js && electron /tmp/aero-verify-core-issues.js",
+    "test:runtime": "electron scratch/verify-full-runtime.js",
+    "start": "npm run build && electron .",
+    "package:mac": "npm run build && electron-builder --mac --dir",
+    "dist:mac": "npm run build && electron-builder --mac dmg",
+    "package:win": "npm run build && electron-builder --win --x64 --dir",
+    "dist:win": "npm run build && electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "com.aero.browser",
+    "productName": "Aero Browser",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Aero Browser Setup ${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Aero Browser"
+    }
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^34.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0",
+    "wait-on": "^8.0.2"
+  }
+}
