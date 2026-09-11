@@ -2,6 +2,10 @@
   "name": "aero-browser",
   "version": "1.0.0",
   "description": "Minimal Electron desktop browser with native tabs, translation, and host-based blocking",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jun1301/aero-browser.git"
+  },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev:vite": "vite",
@@ -25,6 +29,12 @@
     "productName": "Aero Browser",
     "directories": {
       "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "jun1301",
+      "repo": "aero-browser-releases",
+      "releaseType": "draft"
     },
     "files": [
       "dist/**/*",
