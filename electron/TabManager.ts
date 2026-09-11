@@ -374,6 +374,28 @@ export class TabManager {
     // Context menu
     wc.on('context-menu', (_e, params) => {
       const items: MenuItemConstructorOptions[] = [];
+      const linkUrl = typeof params.linkURL === 'string' ? params.linkURL.trim() : '';
+      if (this.isLoadableWebUrl(linkUrl)) {
+        items.push(
+          {
+            label: '새 탭에서 링크 열기',
+            click: () => this.sendToChrome('tab:open-link-in-new-tab', linkUrl),
+          },
+          {
+            label: '새 창에서 링크 열기',
+            click: () => this.sendToChrome('tab:open-link-in-new-window', linkUrl),
+          },
+          {
+            label: '분할 뷰에서 링크 열기',
+            click: () => this.sendToChrome('tab:open-link-in-split', linkUrl),
+          },
+          {
+            label: '시크릿 창에서 링크 열기',
+            click: () => this.sendToChrome('tab:open-link-in-private-window', linkUrl),
+          },
+          { type: 'separator' },
+        );
+      }
       const selectedText = params.selectionText ? params.selectionText.trim() : '';
       if (selectedText) {
         const preview = selectedText.length > 25 ? selectedText.substring(0, 25) + '...' : selectedText;

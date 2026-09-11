@@ -124,6 +124,10 @@ export interface ElectronAPI {
 
   // Navigation & External
   onOpenExternal: (callback: (url: string) => void) => () => void;
+  onOpenLinkInNewTab: (callback: (url: string) => void) => () => void;
+  onOpenLinkInNewWindow: (callback: (url: string) => void) => () => void;
+  onOpenLinkInSplitView: (callback: (url: string) => void) => () => void;
+  onOpenLinkInPrivateWindow: (callback: (url: string) => void) => () => void;
   openExternal: (url: string) => void;
 
   // Translation
@@ -287,6 +291,26 @@ const electronAPI: ElectronAPI = {
     const sub = (_e: any, url: string) => callback(url);
     ipcRenderer.on('tab:open-external', sub);
     return () => ipcRenderer.removeListener('tab:open-external', sub);
+  },
+  onOpenLinkInNewTab: (callback) => {
+    const sub = (_e: any, url: string) => callback(url);
+    ipcRenderer.on('tab:open-link-in-new-tab', sub);
+    return () => ipcRenderer.removeListener('tab:open-link-in-new-tab', sub);
+  },
+  onOpenLinkInNewWindow: (callback) => {
+    const sub = (_e: any, url: string) => callback(url);
+    ipcRenderer.on('tab:open-link-in-new-window', sub);
+    return () => ipcRenderer.removeListener('tab:open-link-in-new-window', sub);
+  },
+  onOpenLinkInSplitView: (callback) => {
+    const sub = (_e: any, url: string) => callback(url);
+    ipcRenderer.on('tab:open-link-in-split', sub);
+    return () => ipcRenderer.removeListener('tab:open-link-in-split', sub);
+  },
+  onOpenLinkInPrivateWindow: (callback) => {
+    const sub = (_e: any, url: string) => callback(url);
+    ipcRenderer.on('tab:open-link-in-private-window', sub);
+    return () => ipcRenderer.removeListener('tab:open-link-in-private-window', sub);
   },
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url),
 

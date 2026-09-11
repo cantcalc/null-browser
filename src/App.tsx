@@ -954,6 +954,24 @@ export const App: React.FC = () => {
         handleNewTab(url);
     });
 
+    const unsubOpenLinkInNewTab = api.onOpenLinkInNewTab((url) => {
+      handleNewTab(url);
+    });
+    const unsubOpenLinkInNewWindow = api.onOpenLinkInNewWindow((url) => {
+      api.newWindow(url);
+    });
+    const unsubOpenLinkInSplitView = api.onOpenLinkInSplitView((url) => {
+      const newTabId = handleNewTab(url, { select: false });
+      const currentActiveId = activeTabIdRef.current;
+      if (!newTabId || !currentActiveId || newTabId === currentActiveId) return;
+      setSplitSecondaryTabId(newTabId);
+      setSplitEnabled(true);
+      api.setSplitView(true, newTabId, splitRatio);
+    });
+    const unsubOpenLinkInPrivateWindow = api.onOpenLinkInPrivateWindow((url) => {
+      api.newPrivateWindow(url);
+    });
+
     // Listen for WebContentsView status updates
     const unsubStatus = api.onTabStatusUpdated((data) => {
         handleUpdateTab(data.id, data);
@@ -1067,6 +1085,10 @@ export const App: React.FC = () => {
       unsubDownload();
       unsubDownloadsCleared();
       unsubExternal();
+      unsubOpenLinkInNewTab();
+      unsubOpenLinkInNewWindow();
+      unsubOpenLinkInSplitView();
+      unsubOpenLinkInPrivateWindow();
       unsubStatus();
       unsubPermission();
       unsubFind();
@@ -1075,7 +1097,7 @@ export const App: React.FC = () => {
       unsubGesture();
       unsubMenu();
     };
-  }, [isIncognito]);
+  }, [isIncognito, handleNewTab, splitRatio]);
 
   // Save session on tab changes (disabled in incognito)
   useEffect(() => {
