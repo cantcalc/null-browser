@@ -19,8 +19,8 @@
     "test:core": "esbuild scratch/verify-core-issues.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/aero-verify-core-issues.js && electron /tmp/aero-verify-core-issues.js",
     "test:runtime": "electron scratch/verify-full-runtime.js",
     "start": "npm run build && electron .",
-    "package:mac": "npm run build && electron-builder --mac --dir --publish never",
-    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
+    "package:mac": "npm run build && electron-builder --mac --dir --publish never && codesign --force --deep --sign - \"release/mac-arm64/Aero Browser.app\"",
+    "dist:mac": "npm run build && electron-builder --mac --dir --publish never && codesign --force --deep --sign - \"release/mac-arm64/Aero Browser.app\" && electron-builder --mac dmg zip --prepackaged \"release/mac-arm64/Aero Browser.app\" --publish never",
     "package:win": "npm run build && electron-builder --win --x64 --dir --publish never",
     "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never"
   },
