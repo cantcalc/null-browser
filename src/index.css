@@ -770,6 +770,49 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--chrome-connected) 70%, #40356e 30%);
 }
 
+/* Navigation gesture feedback stays inside the content stage so it never
+   covers browser controls or steals pointer input. */
+.aero-navigation-gesture {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.aero-navigation-gesture--back {
+  justify-content: flex-start;
+  padding-left: 24px;
+}
+
+.aero-navigation-gesture--forward {
+  justify-content: flex-end;
+  padding-right: 24px;
+}
+
+.aero-navigation-gesture-bubble {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chrome-surface-active) 82%, var(--accent) 18%);
+  color: var(--accent);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2), 0 0 0 5px color-mix(in srgb, var(--accent) 8%, transparent);
+  opacity: 0;
+}
+
+.aero-navigation-gesture--back .aero-navigation-gesture-bubble {
+  animation: aero-gesture-back 320ms var(--ease-aero-out) both;
+}
+
+.aero-navigation-gesture--forward .aero-navigation-gesture-bubble {
+  animation: aero-gesture-forward 320ms var(--ease-aero-out) both;
+}
+
 @keyframes aero-layer-in {
   from { opacity: 0; transform: translateY(4px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -783,6 +826,18 @@ textarea:focus-visible {
 @keyframes aero-tab-enter {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes aero-gesture-back {
+  0% { opacity: 0; transform: translateX(-14px) scale(0.9); }
+  32% { opacity: 0.95; transform: translateX(0) scale(1); }
+  100% { opacity: 0; transform: translateX(8px) scale(0.96); }
+}
+
+@keyframes aero-gesture-forward {
+  0% { opacity: 0; transform: translateX(14px) scale(0.9); }
+  32% { opacity: 0.95; transform: translateX(0) scale(1); }
+  100% { opacity: 0; transform: translateX(-8px) scale(0.96); }
 }
 
 .aero-settings [class*="rounded-xl"],

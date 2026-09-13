@@ -1,16 +1,14 @@
 import { ipcRenderer } from 'electron';
 
 // 1. Mouse Side Buttons (Button 3 = Back, Button 4 = Forward) & Middle-click on Links
-function handleSideButtons(e: MouseEvent) {
-  if (e.button === 3) {
-    e.preventDefault();
-    e.stopPropagation();
-    ipcRenderer.send('tab:guest-gesture', 'back');
-  } else if (e.button === 4) {
-    e.preventDefault();
-    e.stopPropagation();
-    ipcRenderer.send('tab:guest-gesture', 'forward');
-  }
+// Handle side buttons on pointerdown so navigation starts immediately and the
+// page cannot consume the same button as a native gesture.
+function handleSideButtons(e: PointerEvent) {
+  const action = e.button === 3 ? 'back' : e.button === 4 ? 'forward' : null;
+  if (!action) return;
+  e.preventDefault();
+  e.stopPropagation();
+  ipcRenderer.send('tab:guest-gesture', action);
 }
 
 window.addEventListener(
@@ -29,27 +27,72 @@ window.addEventListener(
 );
 // Use one pointer event path only. Listening to mouseup, pointerup and
 // auxclick together sends duplicate back/forward commands on many mice.
-window.addEventListener('pointerup', handleSideButtons, true);
+window.addEventListener('pointerdown', handleSideButtons, true);
 
 // 2. Trackpad Horizontal Swipe Back / Forward
 let lastSwipeTime = 0;
+let swipeDeltaX = 0;
+let swipeDeltaY = 0;
+let swipeDirection = 0;
+let swipeResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+function resetSwipeAccumulator() {
+  swipeDeltaX = 0;
+  swipeDeltaY = 0;
+  swipeDirection = 0;
+  if (swipeResetTimer) {
+    clearTimeout(swipeResetTimer);
+    swipeResetTimer = null;
+  }
+}
+
 window.addEventListener(
   'wheel',
   (e: WheelEvent) => {
-    if (Math.abs(e.deltaX) > 40 && Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.8) {
-      const now = Date.now();
-      if (now - lastSwipeTime < 650) return;
-      const scrollLeft = window.scrollX || document.documentElement.scrollLeft || 0;
-      const maxScroll = (document.documentElement.scrollWidth || 0) - window.innerWidth;
-      if (e.deltaX < -45 && scrollLeft <= 2) {
-        lastSwipeTime = now;
-        e.preventDefault();
-        ipcRenderer.send('tab:guest-gesture', 'back');
-      } else if (e.deltaX > 45 && scrollLeft >= maxScroll - 2) {
-        lastSwipeTime = now;
-        e.preventDefault();
-        ipcRenderer.send('tab:guest-gesture', 'forward');
-      }
+    if (e.ctrlKey) return;
+
+    // Trackpads often emit a stream of small wheel deltas rather than one
+    // large event. Accumulate a short, mostly-horizontal stream so light
+    // swipes are not missed while vertical scrolling remains untouched.
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerWidth : 1;
+    const deltaX = e.deltaX * unit;
+    const deltaY = e.deltaY * unit;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    if (absX < 0.5 || absX <= absY * 1.15) {
+      if (absY > absX * 1.5) resetSwipeAccumulator();
+      return;
+    }
+
+    const direction = Math.sign(deltaX);
+    if (swipeDirection && swipeDirection !== direction) resetSwipeAccumulator();
+    swipeDirection = direction;
+    swipeDeltaX += deltaX;
+    swipeDeltaY += absY;
+    if (swipeResetTimer) clearTimeout(swipeResetTimer);
+    swipeResetTimer = setTimeout(resetSwipeAccumulator, 180);
+
+    const now = Date.now();
+    if (now - lastSwipeTime < 650) {
+      resetSwipeAccumulator();
+      return;
+    }
+
+    const accumulatedX = Math.abs(swipeDeltaX);
+    const isMostlyHorizontal = accumulatedX >= 56 && swipeDeltaY <= accumulatedX * 0.9;
+    if (!isMostlyHorizontal) return;
+
+    const scrollingElement = document.scrollingElement || document.documentElement;
+    const scrollLeft = scrollingElement.scrollLeft || 0;
+    const maxScroll = Math.max(0, scrollingElement.scrollWidth - scrollingElement.clientWidth);
+    const atBackEdge = swipeDeltaX < 0 && scrollLeft <= 4;
+    const atForwardEdge = swipeDeltaX > 0 && (maxScroll <= 4 || scrollLeft >= maxScroll - 4);
+    if (atBackEdge || atForwardEdge) {
+      lastSwipeTime = now;
+      e.preventDefault();
+      e.stopPropagation();
+      ipcRenderer.send('tab:guest-gesture', swipeDeltaX < 0 ? 'back' : 'forward');
+      resetSwipeAccumulator();
     }
   },
   { passive: false }
