@@ -972,9 +972,9 @@ export const App: React.FC = () => {
 
     // Listen for external URL opens (popups / target=_blank)
     const unsubExternal = api.onOpenExternal((url) => {
-        // Keep popup/middle-click targets in the background, matching the
-        // browser's "open in new tab" behavior without changing focus.
-        handleNewTab(url, { select: false });
+        // External links and site popups should focus the newly opened tab.
+        // Only the explicit context-menu action below opens in the background.
+        handleNewTab(url);
     });
 
     const unsubOpenLinkInNewTab = api.onOpenLinkInNewTab((url) => {
@@ -1820,22 +1820,19 @@ export const App: React.FC = () => {
           ))}
         </div>
       )}
+      {navigationGesture && (
+        <div
+          key={navigationGesture.id}
+          className={`aero-navigation-gesture-indicator aero-navigation-gesture-indicator--${navigationGesture.action}`}
+          aria-hidden="true"
+        >
+          {navigationGesture.action === 'back' ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+        </div>
+      )}
       </div>
 
       {/* 4. Viewport & Aside Drawer Panel */}
       <div className="aero-content-stage flex-1 flex min-h-0 relative overflow-hidden">
-        {navigationGesture && !isHtmlFullscreen && (
-          <div
-            key={navigationGesture.id}
-            className={`aero-navigation-gesture aero-navigation-gesture--${navigationGesture.action}`}
-            aria-hidden="true"
-          >
-            <div className="aero-navigation-gesture-bubble">
-              {navigationGesture.action === 'back' ? <ArrowLeft className="h-5 w-5" /> : <ArrowRight className="h-5 w-5" />}
-            </div>
-          </div>
-        )}
-
         {/* In-Page Translation Status Floating Pill */}
         {crashRecovery && !isHtmlFullscreen && (
           <div className="aero-popover absolute left-4 right-4 top-3 z-40 flex flex-wrap items-center gap-3 px-4 py-3 text-xs">

@@ -770,47 +770,34 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--chrome-connected) 70%, #40356e 30%);
 }
 
-/* Navigation gesture feedback stays inside the content stage so it never
-   covers browser controls or steals pointer input. */
-.aero-navigation-gesture {
+/* Navigation gesture feedback stays inside the browser chrome. Native
+   WebContentsView content sits above the renderer layer, so a full-stage
+   overlay can flash behind it instead of reading as a clean cue. */
+.aero-navigation-gesture-indicator {
   position: absolute;
-  inset: 0;
-  z-index: 35;
+  bottom: 10px;
+  z-index: 45;
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--chrome-surface-active) 88%, var(--accent) 12%);
+  color: var(--accent);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.16);
   pointer-events: none;
 }
 
-.aero-navigation-gesture--back {
-  justify-content: flex-start;
-  padding-left: 24px;
+.aero-navigation-gesture-indicator--back {
+  left: 12px;
+  animation: aero-gesture-indicator-back 240ms var(--ease-aero-out) both;
 }
 
-.aero-navigation-gesture--forward {
-  justify-content: flex-end;
-  padding-right: 24px;
-}
-
-.aero-navigation-gesture-bubble {
-  display: flex;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chrome-surface-active) 82%, var(--accent) 18%);
-  color: var(--accent);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2), 0 0 0 5px color-mix(in srgb, var(--accent) 8%, transparent);
-  opacity: 0;
-}
-
-.aero-navigation-gesture--back .aero-navigation-gesture-bubble {
-  animation: aero-gesture-back 320ms var(--ease-aero-out) both;
-}
-
-.aero-navigation-gesture--forward .aero-navigation-gesture-bubble {
-  animation: aero-gesture-forward 320ms var(--ease-aero-out) both;
+.aero-navigation-gesture-indicator--forward {
+  right: 12px;
+  animation: aero-gesture-indicator-forward 240ms var(--ease-aero-out) both;
 }
 
 @keyframes aero-layer-in {
@@ -828,16 +815,16 @@ textarea:focus-visible {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes aero-gesture-back {
-  0% { opacity: 0; transform: translateX(-14px) scale(0.9); }
-  32% { opacity: 0.95; transform: translateX(0) scale(1); }
-  100% { opacity: 0; transform: translateX(8px) scale(0.96); }
+@keyframes aero-gesture-indicator-back {
+  0% { opacity: 0; transform: translateX(-6px); }
+  35% { opacity: 0.94; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(4px); }
 }
 
-@keyframes aero-gesture-forward {
-  0% { opacity: 0; transform: translateX(14px) scale(0.9); }
-  32% { opacity: 0.95; transform: translateX(0) scale(1); }
-  100% { opacity: 0; transform: translateX(-8px) scale(0.96); }
+@keyframes aero-gesture-indicator-forward {
+  0% { opacity: 0; transform: translateX(6px); }
+  35% { opacity: 0.94; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-4px); }
 }
 
 .aero-settings [class*="rounded-xl"],
