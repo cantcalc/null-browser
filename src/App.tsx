@@ -951,11 +951,13 @@ export const App: React.FC = () => {
 
     // Listen for external URL opens (popups / target=_blank)
     const unsubExternal = api.onOpenExternal((url) => {
-        handleNewTab(url);
+        // Keep popup/middle-click targets in the background, matching the
+        // browser's "open in new tab" behavior without changing focus.
+        handleNewTab(url, { select: false });
     });
 
     const unsubOpenLinkInNewTab = api.onOpenLinkInNewTab((url) => {
-      handleNewTab(url);
+      handleNewTab(url, { select: false });
     });
     const unsubOpenLinkInNewWindow = api.onOpenLinkInNewWindow((url) => {
       api.newWindow(url);
