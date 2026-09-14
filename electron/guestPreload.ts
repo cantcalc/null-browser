@@ -12,19 +12,38 @@ function disableNativeHorizontalOverscroll() {
 disableNativeHorizontalOverscroll();
 
 // 1. Mouse Side Buttons (Button 3 = Back, Button 4 = Forward) & Middle-click on Links
-// Handle side buttons on pointerdown so navigation starts immediately and the
-// page cannot consume the same button as a native gesture.
-function handleSideButtons(e: PointerEvent) {
+// Different mice and macOS input drivers expose side buttons through
+// different DOM event types. Capture all of them, but deduplicate the same
+// physical click so one button press can never navigate twice.
+let lastSideButtonAction: { action: 'back' | 'forward'; at: number } | null = null;
+
+function consumeSideButton(e: MouseEvent | PointerEvent): boolean {
   const action = e.button === 3 ? 'back' : e.button === 4 ? 'forward' : null;
-  if (!action) return;
+  if (!action) return false;
   e.preventDefault();
   e.stopPropagation();
+  e.stopImmediatePropagation();
+  const now = performance.now();
+  if (lastSideButtonAction?.action === action && now - lastSideButtonAction.at < 160) {
+    return true;
+  }
+  lastSideButtonAction = { action, at: now };
   ipcRenderer.send('tab:guest-gesture', action);
+  return true;
+}
+
+function handlePointerSideButton(e: PointerEvent) {
+  consumeSideButton(e);
+}
+
+function handleMouseSideButton(e: MouseEvent) {
+  consumeSideButton(e);
 }
 
 window.addEventListener(
   'auxclick',
   (e: MouseEvent) => {
+    if (consumeSideButton(e)) return;
     if (e.button === 1) {
       const a = (e.target as HTMLElement)?.closest?.('a') as HTMLAnchorElement | null;
       if (a && a.href && /^https?:\/\//i.test(a.href)) {
@@ -36,9 +55,9 @@ window.addEventListener(
   },
   true
 );
-// Use one pointer event path only. Listening to mouseup, pointerup and
-// auxclick together sends duplicate back/forward commands on many mice.
-window.addEventListener('pointerdown', handleSideButtons, true);
+window.addEventListener('pointerdown', handlePointerSideButton, true);
+window.addEventListener('mousedown', handleMouseSideButton, true);
+window.addEventListener('mouseup', handleMouseSideButton, true);
 
 // 2. Trackpad Horizontal Swipe Back / Forward
 let lastSwipeTime = 0;

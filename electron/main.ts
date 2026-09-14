@@ -13,6 +13,11 @@ import { clearOriginStorage } from './siteData';
 import { UpdateManager } from './Updater';
 import { ExtensionManager } from './ExtensionManager';
 
+// Horizontal history navigation is implemented by Aero's gesture bridge.
+// Disable Chromium's native overscroll history animation so it cannot flash
+// the WebContentsView while the browser performs the same navigation.
+app.commandLine.appendSwitch('disable-features', 'OverscrollHistoryNavigation');
+
 let mainWindow: BrowserWindow | null = null;
 const allWindows: Set<BrowserWindow> = new Set();
 const windowTabManagers: Map<BrowserWindow, TabManager> = new Map();
