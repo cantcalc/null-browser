@@ -770,36 +770,6 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--chrome-connected) 70%, #40356e 30%);
 }
 
-/* Navigation gesture feedback stays inside the browser chrome. Native
-   WebContentsView content sits above the renderer layer, so a full-stage
-   overlay can flash behind it instead of reading as a clean cue. */
-.aero-navigation-gesture-indicator {
-  position: absolute;
-  bottom: 10px;
-  z-index: 45;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 26px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--chrome-surface-active) 88%, var(--accent) 12%);
-  color: var(--accent);
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.16);
-  pointer-events: none;
-}
-
-.aero-navigation-gesture-indicator--back {
-  left: 12px;
-  animation: aero-gesture-indicator-back 240ms var(--ease-aero-out) both;
-}
-
-.aero-navigation-gesture-indicator--forward {
-  right: 12px;
-  animation: aero-gesture-indicator-forward 240ms var(--ease-aero-out) both;
-}
-
 @keyframes aero-layer-in {
   from { opacity: 0; transform: translateY(4px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -813,18 +783,6 @@ textarea:focus-visible {
 @keyframes aero-tab-enter {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes aero-gesture-indicator-back {
-  0% { opacity: 0; transform: translateX(-6px); }
-  35% { opacity: 0.94; transform: translateX(0); }
-  100% { opacity: 0; transform: translateX(4px); }
-}
-
-@keyframes aero-gesture-indicator-forward {
-  0% { opacity: 0; transform: translateX(6px); }
-  35% { opacity: 0.94; transform: translateX(0); }
-  100% { opacity: 0; transform: translateX(-4px); }
 }
 
 .aero-settings [class*="rounded-xl"],

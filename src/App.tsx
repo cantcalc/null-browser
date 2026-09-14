@@ -11,7 +11,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { WorkspaceBar } from './components/WorkspaceBar';
 import { Tab, Workspace, BrowserSettings, Bookmark, HistoryEntry, SearchHistoryItem, DownloadItem, FavoriteItem, ClearDataOptions, PermissionPrompt as PermissionPromptData } from './types/browser';
 import { NavigationResult, parseNavigationInput } from './utils/navigationParser';
-import { ArrowLeft, ArrowRight, Loader2, Check } from 'lucide-react';
+import { Loader2, Check } from 'lucide-react';
 import { PermissionPrompt } from './components/PermissionPrompt';
 import { BrowserErrorView } from './components/BrowserErrorView';
 import { LibraryModal } from './components/LibraryModal';
@@ -61,7 +61,6 @@ const NEW_TAB_URL = 'aero://newtab';
 const DEFAULT_WORKSPACE_ID = 'workspace-default';
 const PRIVATE_WORKSPACE_ID = 'workspace-private';
 type PageTranslationStatus = 'idle' | 'translating' | 'translated' | 'restoring' | 'failed';
-type NavigationGestureAction = 'back' | 'forward';
 
 function isNewTabUrl(url?: string): boolean {
   return !url || url === NEW_TAB_URL || url === 'browser://newtab' || /^about:blank(?:[#?].*)?$/i.test(url);
@@ -184,9 +183,6 @@ export const App: React.FC = () => {
   const [pageTranslationStatus, setPageTranslationStatus] = useState<PageTranslationStatus>('idle');
   const [translateToast, setTranslateToast] = useState<{ text: string } | null>(null);
   const [externalTranslateText, setExternalTranslateText] = useState<string | null>(null);
-  const [navigationGesture, setNavigationGesture] = useState<{ action: NavigationGestureAction; id: number } | null>(null);
-  const navigationGestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const navigationGestureSequenceRef = useRef(0);
 
   // 5. Find in page state
   const [isFindOpen, setIsFindOpen] = useState(false);
@@ -205,23 +201,6 @@ export const App: React.FC = () => {
   workspacesRef.current = workspaces;
   zoomLevelRef.current = zoomLevel;
   pageTranslatedTabIdsRef.current = pageTranslatedTabIds;
-
-  const showNavigationGesture = useCallback((action: NavigationGestureAction) => {
-    const currentTab = tabsRef.current.find((tab) => tab.id === activeTabIdRef.current);
-    const canNavigate = action === 'back' ? currentTab?.canGoBack : currentTab?.canGoForward;
-    if (!canNavigate) return;
-
-    setNavigationGesture({ action, id: ++navigationGestureSequenceRef.current });
-    if (navigationGestureTimerRef.current) clearTimeout(navigationGestureTimerRef.current);
-    navigationGestureTimerRef.current = setTimeout(() => {
-      setNavigationGesture(null);
-      navigationGestureTimerRef.current = null;
-    }, 320);
-  }, []);
-
-  useEffect(() => () => {
-    if (navigationGestureTimerRef.current) clearTimeout(navigationGestureTimerRef.current);
-  }, []);
 
   const workspaceTabs = tabs.filter((tab) => tab.workspaceId === activeWorkspaceId);
 
@@ -1027,10 +1006,8 @@ export const App: React.FC = () => {
     const unsubGesture = api.onTabGesture((data) => {
         if (data.action === 'back') {
           handleGoBack();
-          showNavigationGesture('back');
         } else if (data.action === 'forward') {
           handleGoForward();
-          showNavigationGesture('forward');
         }
         else if (data.action === 'reload') handleReload();
     });
@@ -1125,7 +1102,7 @@ export const App: React.FC = () => {
       unsubGesture();
       unsubMenu();
     };
-  }, [isIncognito, handleNewTab, splitRatio, showNavigationGesture]);
+  }, [isIncognito, handleNewTab, splitRatio]);
 
   // Save session on tab changes (disabled in incognito)
   useEffect(() => {
@@ -1445,17 +1422,15 @@ export const App: React.FC = () => {
         e.preventDefault();
         e.stopPropagation();
         handleGoBack();
-        showNavigationGesture('back');
       } else if (e.button === 4) {
         e.preventDefault();
         e.stopPropagation();
         handleGoForward();
-        showNavigationGesture('forward');
       }
     };
     window.addEventListener('pointerdown', handlePointerDown);
     return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [handleGoBack, handleGoForward, showNavigationGesture]);
+  }, [handleGoBack, handleGoForward]);
 
   // DevTools
   const handleToggleDevTools = useCallback(() => {
@@ -1818,15 +1793,6 @@ export const App: React.FC = () => {
               <span className="truncate">{bookmark.title || bookmark.url}</span>
             </button>
           ))}
-        </div>
-      )}
-      {navigationGesture && (
-        <div
-          key={navigationGesture.id}
-          className={`aero-navigation-gesture-indicator aero-navigation-gesture-indicator--${navigationGesture.action}`}
-          aria-hidden="true"
-        >
-          {navigationGesture.action === 'back' ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
         </div>
       )}
       </div>
