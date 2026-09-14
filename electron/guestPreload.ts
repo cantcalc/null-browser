@@ -66,6 +66,24 @@ window.addEventListener(
 
     const direction = Math.sign(deltaX);
     if (swipeDirection && swipeDirection !== direction) resetSwipeAccumulator();
+
+    // Consume an edge-bound horizontal stream before Chromium's native
+    // overscroll compositor can paint its transient rubber-band/flash state.
+    // Vertical scrolling and horizontal scrolling away from the document edge
+    // remain untouched.
+    const scrollingElement = document.scrollingElement || document.documentElement;
+    const scrollLeft = scrollingElement.scrollLeft || 0;
+    const maxScroll = Math.max(0, scrollingElement.scrollWidth - scrollingElement.clientWidth);
+    const atBackEdge = direction < 0 && scrollLeft <= 4;
+    const atForwardEdge = direction > 0 && (maxScroll <= 4 || scrollLeft >= maxScroll - 4);
+    if (!atBackEdge && !atForwardEdge) {
+      resetSwipeAccumulator();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
     swipeDirection = direction;
     swipeDeltaX += deltaX;
     swipeDeltaY += absY;
@@ -82,20 +100,11 @@ window.addEventListener(
     const isMostlyHorizontal = accumulatedX >= 56 && swipeDeltaY <= accumulatedX * 0.9;
     if (!isMostlyHorizontal) return;
 
-    const scrollingElement = document.scrollingElement || document.documentElement;
-    const scrollLeft = scrollingElement.scrollLeft || 0;
-    const maxScroll = Math.max(0, scrollingElement.scrollWidth - scrollingElement.clientWidth);
-    const atBackEdge = swipeDeltaX < 0 && scrollLeft <= 4;
-    const atForwardEdge = swipeDeltaX > 0 && (maxScroll <= 4 || scrollLeft >= maxScroll - 4);
-    if (atBackEdge || atForwardEdge) {
-      lastSwipeTime = now;
-      e.preventDefault();
-      e.stopPropagation();
-      ipcRenderer.send('tab:guest-gesture', swipeDeltaX < 0 ? 'back' : 'forward');
-      resetSwipeAccumulator();
-    }
+    lastSwipeTime = now;
+    ipcRenderer.send('tab:guest-gesture', swipeDeltaX < 0 ? 'back' : 'forward');
+    resetSwipeAccumulator();
   },
-  { passive: false }
+  { capture: true, passive: false }
 );
 
 // 3. In-Page Selection Translation Pill & Popover Card (부분 번역)
