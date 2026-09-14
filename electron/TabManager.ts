@@ -567,7 +567,10 @@ export class TabManager {
     const entry = this.tabs.get(tabId);
     if (entry && this.canGoBack(entry.view.webContents)) {
       this.invalidateTranslationJob(tabId);
-      entry.view.webContents.navigationHistory.goBack();
+      // Use the same WebContents navigation path as the page context menu.
+      // Keeping gesture, toolbar, and menu navigation on one path avoids a
+      // renderer transition difference that can appear as a brief flash.
+      entry.view.webContents.goBack();
     }
   }
 
@@ -575,7 +578,7 @@ export class TabManager {
     const entry = this.tabs.get(tabId);
     if (entry && this.canGoForward(entry.view.webContents)) {
       this.invalidateTranslationJob(tabId);
-      entry.view.webContents.navigationHistory.goForward();
+      entry.view.webContents.goForward();
     }
   }
 
