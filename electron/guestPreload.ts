@@ -1,5 +1,16 @@
 import { ipcRenderer } from 'electron';
 
+// The browser owns horizontal back/forward gestures. Prevent Chromium's
+// native edge overscroll animation from competing with that gesture path.
+function disableNativeHorizontalOverscroll() {
+  const style = document.createElement('style');
+  style.id = '__aero_horizontal_gesture_guard';
+  style.textContent = 'html, body { overscroll-behavior-x: none !important; }';
+  (document.head || document.documentElement)?.appendChild(style);
+}
+
+disableNativeHorizontalOverscroll();
+
 // 1. Mouse Side Buttons (Button 3 = Back, Button 4 = Forward) & Middle-click on Links
 // Handle side buttons on pointerdown so navigation starts immediately and the
 // page cannot consume the same button as a native gesture.
