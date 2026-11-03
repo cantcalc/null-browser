@@ -34,7 +34,7 @@ const archive = path.join(appResources, 'app.asar');
 const packed = JSON.parse(asar.extractFile(archive, 'package.json').toString()); assert.equal(packed.version, pkg.version); assert.equal(packed.name, 'null-browser');
 const hash = buffer => crypto.createHash('sha256').update(buffer).digest('hex');
 const walk = directory => fs.readdirSync(path.join(root, directory), { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(directory,e.name)) : [path.join(directory,e.name)]);
-for (const filename of [...walk('dist'), ...walk('dist-electron')]) assert.equal(hash(asar.extractFile(archive, filename.replaceAll('\\','/'))), hash(fs.readFileSync(path.join(root, filename))), 'Packed source differs: ' + filename);
+for (const filename of [...walk('dist'), ...walk('dist-electron')]) assert.equal(hash(asar.extractFile(archive, filename)), hash(fs.readFileSync(path.join(root, filename))), 'Packed source differs: ' + filename);
 for (const name of ['THIRD_PARTY_NOTICES.txt','LICENSE.NULL.txt','LICENSE.electron.txt','LICENSES.chromium.html']) assert(fs.statSync(path.join(appResources,'licenses',name)).size > 0, 'Missing bundled license');
 const artifacts = names.filter(n => /\.(dmg|zip|exe|blockmap)$/.test(n) || /^(latest|beta|alpha)(-mac)?\.yml$/.test(n));
 const manifest = { version: pkg.version, platform, sourceCommit: process.env.GITHUB_SHA || require('node:child_process').execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(), provider: {provider:provider.provider,owner:provider.owner,repo:provider.repo}, packedSourcesMatch: true, files: artifacts.map(name => ({ name, size: fs.statSync(path.join(output,name)).size, sha256: hash(fs.readFileSync(path.join(output,name))) })) };
