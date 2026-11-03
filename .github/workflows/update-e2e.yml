@@ -16,7 +16,7 @@ jobs:
       - run: npm run build
       - run: npm run licenses
       - name: Build older controlled QA installer (never publish)
-        run: npx electron-builder --win nsis --x64 --publish never -c.extraMetadata.version=1.0.0-beta.0 -c.directories.output=update-e2e-old
+        run: node scripts/build-updater-base.cjs
       - name: Install older QA app and use the real public update feed
         shell: pwsh
         run: |
