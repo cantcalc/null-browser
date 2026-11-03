@@ -77,6 +77,7 @@ module.exports = async function qa(ctx) {
   await waitFor(()=>page(`!!document.querySelector('[data-settings-nav="appearance"]')`),'settings');
   await page(`document.querySelector('[data-settings-nav="appearance"]').click();true`);
   await waitFor(()=>page(`!!document.querySelector('[aria-label="Air 디자인"]')`),'design picker');
+  const savedStyleBeforePreview = await page('window.electronAPI.getSettings().then(s=>s.interfaceStyle)');
   const geometry = {};
   for (const style of ['core','air','studio']) {
     await page(`document.querySelector('[data-style="${style}"]').click();true`);
@@ -93,7 +94,7 @@ module.exports = async function qa(ctx) {
   assert(new Set(['core','air','studio'].map(s=>geometry[`${s}-1440`].chromeHeight)).size===3,'styles indistinguishable');
   results.threeDistinctStylesAndNineResponsiveLayouts=geometry;
   await page(`document.querySelector('.null-settings-secondary').click();true`);
-  assert(await page(`document.documentElement.dataset.interfaceStyle==='core'`),'cancel failed to restore skin');
+  assert(await page(`document.documentElement.dataset.interfaceStyle===${JSON.stringify(savedStyleBeforePreview)}`),'cancel failed to restore skin');
   results.designPreviewCancel=true;
   await page(`document.querySelector('[data-style="air"]').click();true`);
   await waitFor(()=>page(`document.querySelector('[data-style="air"]').getAttribute('aria-pressed')==='true'`),'Air draft committed');
