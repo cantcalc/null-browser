@@ -21,6 +21,7 @@ async function run(){
   assert.equal(process.platform,'win32','Full unattended install test is Windows-only');
   const old=qa.getChild(),exited=new Promise(r=>old.once('exit',r));
   await page.evaluate("window.electronAPI.installUpdate();true").catch(()=>{});
+  qa.disconnect();
   await Promise.race([exited,delay(30000)]);assert.notEqual(old.exitCode,null,'Old application did not quit');
   const escaped=binary.replaceAll("'","''");
   const getVersion=()=>execFileSync('powershell',['-NoProfile','-Command',`(Get-Item -LiteralPath '${escaped}').VersionInfo.ProductVersion`],{encoding:'utf8'}).trim();

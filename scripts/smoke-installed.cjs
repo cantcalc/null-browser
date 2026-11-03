@@ -50,5 +50,5 @@ async function run(){
   fs.mkdirSync('release',{recursive:true});fs.writeFileSync(`release/smoke-${process.platform}.json`,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
 }
 const cleanup=()=>{for(const ws of clients)ws.close();if(child?.exitCode===null)child.kill();fixture.close();};
-module.exports={launch,quit,profile,cleanup,getChild:()=>child};
+module.exports={launch,quit,profile,cleanup,getChild:()=>child,disconnect:()=>{for(const ws of clients)ws.close();clients=[];}};
 if(require.main===module)run().catch(e=>{console.error(e);console.error(output.slice(-4000));process.exitCode=1;}).finally(cleanup);
