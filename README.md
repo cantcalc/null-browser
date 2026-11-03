@@ -1,6 +1,6 @@
 # NULL Browser
 
-워크스페이스별 로그인 환경과 단정한 인터페이스를 제공하는 Electron/Chromium 기반 데스크톱 브라우저입니다. 가벼운 사용 흐름을 목표로 개발 중이며, 현재 배포는 **1.0.1-beta.1 테스트 버전(Pre-release)**입니다.
+워크스페이스별 로그인 환경과 단정한 인터페이스를 제공하는 Electron/Chromium 기반 데스크톱 브라우저입니다. 가벼운 사용 흐름을 목표로 개발 중이며, 현재 배포는 **1.0.1-beta.2 테스트 버전(Pre-release)**입니다.
 
 [다운로드 · GitHub Releases](https://github.com/cantcalc/null-browser/releases) · [문제 제보](https://github.com/cantcalc/null-browser/issues)
 
@@ -181,6 +181,6 @@ main/PR에서는 TypeScript·빌드·입력 파서·배포 의존성 감사와 G
 
 ## 라이선스와 제3자 고지
 
-프로젝트 고유 소스의 별도 사용 라이선스는 아직 지정하지 않았으며 패키지에는 `UNLICENSED`로 표시합니다. 의존성은 각자의 라이선스를 따릅니다. 사용자 제공 로고는 의존성 라이선스에 포함하지 않습니다.
+프로젝트 고유 소스는 [MIT 라이선스](LICENSE)로 제공합니다. 수정·재배포·상업적 이용 시 MIT 고지를 유지하세요. 의존성은 각자의 라이선스를 따릅니다. 사용자 제공 로고와 앱 아이콘은 소스 코드의 MIT 라이선스에 포함하지 않는 프로젝트 브랜딩 리소스입니다.
 
 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt), [의존성 목록](docs/DEPENDENCIES.json), [보완 고지 출처](docs/licenses)를 확인하세요. 설치본에는 Electron/Chromium의 라이선스 원문도 동봉합니다. 라이선스 점검 기록이 별도 법률 검토를 의미하지는 않습니다.

@@ -1,6 +1,6 @@
 {
   "name": "null-browser",
-  "version": "1.0.1-beta.1",
+  "version": "1.0.1-beta.2",
   "description": "가벼운 사용 흐름과 워크스페이스별 세션을 갖춘 Chromium 기반 데스크톱 브라우저",
   "repository": {
     "type": "git",
@@ -66,6 +66,10 @@
       {
         "from": "node_modules/electron/dist/LICENSES.chromium.html",
         "to": "licenses/LICENSES.chromium.html"
+      },
+      {
+        "from": "LICENSE",
+        "to": "licenses/LICENSE.NULL.txt"
       }
     ],
     "mac": {
@@ -143,5 +147,5 @@
     "url": "https://github.com/cantcalc/null-browser/issues"
   },
   "author": "NULL Browser contributors",
-  "license": "UNLICENSED"
+  "license": "MIT"
 }
