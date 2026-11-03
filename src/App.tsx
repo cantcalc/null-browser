@@ -1,45 +1,33 @@
+import { SiteInfoPanel } from './components/SiteInfoPanel';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HorizontalTabBar } from './components/HorizontalTabBar';
 import { AddressBar } from './components/AddressBar';
 import { WebViewContainer, WebViewContainerRef } from './components/WebViewContainer';
 import { AsidePanel } from './components/AsidePanel';
-import { CommandPalette } from './components/CommandPalette';
 import { FindBar } from './components/FindBar';
 import { NewTabPage } from './components/NewTabPage';
 import { FirstRunModal } from './components/FirstRunModal';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsPage } from './components/SettingsPage';
+import { internalPageTitle, isInternalPageUrl, isNewTabUrl, isSettingsUrl, normalizeSettingsUrl, settingsSectionFromUrl, settingsUrl, type SettingsSection } from '../shared/internalPages';
 import { WorkspaceBar } from './components/WorkspaceBar';
-import { Tab, Workspace, BrowserSettings, Bookmark, HistoryEntry, SearchHistoryItem, DownloadItem, FavoriteItem, ClearDataOptions, PermissionPrompt as PermissionPromptData } from './types/browser';
+import { Tab, Workspace, BrowserSettings, Bookmark, HistoryEntry, SearchHistoryItem, DownloadItem, ClearDataOptions, PermissionPrompt as PermissionPromptData } from './types/browser';
 import { NavigationResult, parseNavigationInput } from './utils/navigationParser';
-import { Loader2, Check } from 'lucide-react';
 import { PermissionPrompt } from './components/PermissionPrompt';
 import { BrowserErrorView } from './components/BrowserErrorView';
 import { LibraryModal } from './components/LibraryModal';
 
 const DEFAULT_SETTINGS: BrowserSettings = {
+  interfaceStyle: 'studio',
+  homeStyle: 'center',
   firstRunCompleted: false,
   theme: 'noir',
-  accentColor: '#ffffff',
   searchEngine: 'google',
   customSearchUrl: 'https://www.google.com/search?q=%s',
-  searchShortcuts: [
-    { keyword: 'g', name: 'Google', searchUrl: 'https://www.google.com/search?q=%s' },
-    { keyword: 'gh', name: 'GitHub', searchUrl: 'https://github.com/search?q=%s' },
-    { keyword: 'yt', name: 'YouTube', searchUrl: 'https://www.youtube.com/results?search_query=%s' },
-    { keyword: 'mdn', name: 'MDN Web Docs', searchUrl: 'https://developer.mozilla.org/en-US/search?q=%s' },
-    { keyword: 'n', name: 'Naver', searchUrl: 'https://search.naver.com/search.naver?query=%s' },
-  ],
   saveBrowsingHistory: true,
   saveSearchHistory: true,
   showBookmarkBar: false,
   startupBehavior: 'newtab',
-  startupPages: ['aero://newtab'],
-  newTabConfig: {
-    showFavorites: true,
-    showRecentSites: true,
-    showLogo: true,
-    compactMode: false,
-  },
+  startupPages: ['null://newtab'],
   favorites: [
     { id: 'fav-1', title: 'GitHub', url: 'https://github.com' },
     { id: 'fav-2', title: 'Hacker News', url: 'https://news.ycombinator.com' },
@@ -49,29 +37,25 @@ const DEFAULT_SETTINGS: BrowserSettings = {
   downloadPath: '',
   askDownloadLocation: false,
   siteZoom: {},
-  siteTranslation: {},
-  adBlockEnabled: true,
   cookiePolicy: 'allow',
   cookieExceptions: {},
   preferredLanguages: ['ko-KR', 'en-US'],
   spellCheckEnabled: true,
 };
 
-const NEW_TAB_URL = 'aero://newtab';
+const NEW_TAB_URL = 'null://newtab';
 const DEFAULT_WORKSPACE_ID = 'workspace-default';
 const PRIVATE_WORKSPACE_ID = 'workspace-private';
-type PageTranslationStatus = 'idle' | 'translating' | 'translated' | 'restoring' | 'failed';
-
-function isNewTabUrl(url?: string): boolean {
-  return !url || url === NEW_TAB_URL || url === 'browser://newtab' || /^about:blank(?:[#?].*)?$/i.test(url);
-}
 
 function normalizeTabUrl(url?: string): string | null {
   if (isNewTabUrl(url)) return NEW_TAB_URL;
+  const settingsRoute = normalizeSettingsUrl(url);
+  if (settingsRoute) return settingsRoute;
   if (!url) return null;
   try {
     const parsed = new URL(url.trim());
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'file:') return parsed.href;
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'file:' ||
+      (parsed.protocol === 'chrome-extension:' && /^[a-p]{32}$/.test(parsed.hostname))) return parsed.href;
   } catch {}
   return null;
 }
@@ -91,7 +75,7 @@ function isExternalProtocolUrl(url: string): boolean {
 }
 
 function isSplitableTab(tab?: Tab): boolean {
-  return Boolean(tab && !isNewTabUrl(tab.url));
+  return Boolean(tab && !isInternalPageUrl(tab.url));
 }
 
 function makeTabId(): string {
@@ -101,9 +85,11 @@ function makeTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const requestedInitialUrl = normalizeTabUrl(
-  typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('initialUrl') || undefined : undefined
-);
+const rawRequestedInitialUrl = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search).get('initialUrl') : null;
+// An absent launch URL must remain absent. Normalizing undefined to New Tab
+// made every launch look explicit and silently skipped session restoration.
+const requestedInitialUrl = rawRequestedInitialUrl ? normalizeTabUrl(rawRequestedInitialUrl) : null;
 
 export const App: React.FC = () => {
   const webviewContainerRef = useRef<WebViewContainerRef>(null);
@@ -112,24 +98,13 @@ export const App: React.FC = () => {
 
   // 1. Settings & Preferences
   const [settings, setSettings] = useState<BrowserSettings>(DEFAULT_SETTINGS);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'general' | 'search' | 'appearance' | 'privacy' | 'shortcuts' | 'about'>('general');
 
-  // Apply Theme & Accent Color CSS Variables
+  // All visual states use the selected monochrome theme, not a saved accent.
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-theme', settings.theme || 'noir');
-    if (settings.accentColor) {
-      root.style.setProperty('--accent', settings.accentColor);
-      root.style.setProperty('--accent-subtle', `${settings.accentColor}20`);
-      root.style.setProperty('--accent-border', `${settings.accentColor}40`);
-      const value = Number.parseInt(settings.accentColor.slice(1), 16);
-      const luminance = Number.isNaN(value)
-        ? 0
-        : (0.299 * ((value >> 16) & 0xff) + 0.587 * ((value >> 8) & 0xff) + 0.114 * (value & 0xff)) / 255;
-      root.style.setProperty('--accent-foreground', luminance > 0.62 ? '#111827' : '#ffffff');
-    }
-  }, [settings.theme, settings.accentColor]);
+    root.setAttribute('data-interface-style', settings.interfaceStyle || 'studio');
+  }, [settings.theme, settings.interfaceStyle]);
 
   // 2. Tabs State
   const [tabs, setTabs] = useState<Tab[]>([
@@ -159,7 +134,7 @@ export const App: React.FC = () => {
   const [splitSecondaryTabId, setSplitSecondaryTabId] = useState<string | null>(null);
   const [splitRatio, setSplitRatio] = useState(() => {
     if (typeof window === 'undefined') return 0.5;
-    const stored = Number(window.localStorage.getItem('aero.splitRatio'));
+    const stored = Number(window.localStorage.getItem('null.splitRatio') ?? window.localStorage.getItem('aero.splitRatio'));
     return Number.isFinite(stored) && stored >= 0.3 && stored <= 0.7 ? stored : 0.5;
   });
   const [isWorkspaceNameOpen, setIsWorkspaceNameOpen] = useState(false);
@@ -169,20 +144,13 @@ export const App: React.FC = () => {
   const activeTabIdRef = useRef<string | null>('tab-1');
   const activeWorkspaceIdRef = useRef(activeWorkspaceId);
   const workspacesRef = useRef<Workspace[]>(workspaces);
+  const lastSavedSessionRef = useRef<string | null>(null);
 
   // 3. Browser Store Data
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
-  const [favorites, setFavorites] = useState<FavoriteItem[]>(DEFAULT_SETTINGS.favorites);
-  const [blockedCount, setBlockedCount] = useState(0);
-
-  // 4. Translation Loading & Notification State
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [pageTranslationStatus, setPageTranslationStatus] = useState<PageTranslationStatus>('idle');
-  const [translateToast, setTranslateToast] = useState<{ text: string } | null>(null);
-  const [externalTranslateText, setExternalTranslateText] = useState<string | null>(null);
 
   // 5. Find in page state
   const [isFindOpen, setIsFindOpen] = useState(false);
@@ -192,20 +160,17 @@ export const App: React.FC = () => {
   // 6. Zoom
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const zoomLevelRef = useRef(1.0);
-  const [pageTranslatedTabIds, setPageTranslatedTabIds] = useState<Set<string>>(new Set());
-  const pageTranslatedTabIdsRef = useRef<Set<string>>(new Set());
 
   tabsRef.current = tabs;
   activeTabIdRef.current = activeTabId;
   activeWorkspaceIdRef.current = activeWorkspaceId;
   workspacesRef.current = workspaces;
   zoomLevelRef.current = zoomLevel;
-  pageTranslatedTabIdsRef.current = pageTranslatedTabIds;
 
   const workspaceTabs = tabs.filter((tab) => tab.workspaceId === activeWorkspaceId);
 
   useEffect(() => {
-    window.localStorage?.setItem('aero.splitRatio', String(splitRatio));
+    window.localStorage?.setItem('null.splitRatio', String(splitRatio));
   }, [splitRatio]);
 
   const handleSplitRatioChange = useCallback((ratio: number) => {
@@ -225,16 +190,19 @@ export const App: React.FC = () => {
   // Onboarding is a packaged-app first-run flow. Keep it out of the Vite
   // development/browser preview so normal UI work is not blocked by it.
   const shouldShowFirstRun =
+    !isIncognito &&
     !import.meta.env.DEV &&
     Boolean(window.electronAPI) &&
     settingsReady &&
     !settings.firstRunCompleted;
 
-  // 7. Aside & Command palette modals
+  // 7. Utility panel and browser dialogs
   const [isAsideOpen, setIsAsideOpen] = useState(false);
   const [isSiteInfoOpen, setIsSiteInfoOpen] = useState(false);
+  const [settingsSiteOrigin, setSettingsSiteOrigin] = useState<string | null>(null);
+  const selectedSiteOrigin = getSiteOrigin(tabs.find(tab => tab.id === activeTabId)?.url);
+  useEffect(() => { setIsSiteInfoOpen(false); }, [activeTabId, selectedSiteOrigin]);
   const [sitePermissions, setSitePermissions] = useState<Record<string, 'allow' | 'deny'>>({});
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [pageSource, setPageSource] = useState<string | null>(null);
   const [permissionRequests, setPermissionRequests] = useState<PermissionPromptData[]>([]);
@@ -252,7 +220,7 @@ export const App: React.FC = () => {
   }, [permissionRequests]);
 
   useEffect(() => {
-    const origin = getSiteOrigin(tabs.find((tab) => tab.id === activeTabId)?.url);
+    const origin = selectedSiteOrigin;
     if (!origin || !window.electronAPI) {
       setSitePermissions({});
       return;
@@ -264,7 +232,7 @@ export const App: React.FC = () => {
       if (!cancelled) setSitePermissions({});
     });
     return () => { cancelled = true; };
-  }, [activeTabId, tabs]);
+  }, [activeTabId, selectedSiteOrigin]);
 
   const refreshActiveSitePermissions = useCallback(() => {
     const origin = getSiteOrigin(tabsRef.current.find((tab) => tab.id === activeTabIdRef.current)?.url);
@@ -279,7 +247,7 @@ export const App: React.FC = () => {
 
   const handleSitePermissionChange = useCallback(async (permission: string, decision: 'allow' | 'deny' | 'default') => {
     const origin = getSiteOrigin(tabsRef.current.find((tab) => tab.id === activeTabIdRef.current)?.url);
-    if (!origin || !window.electronAPI) return;
+    if (!origin || !window.electronAPI) return false;
     const previous = sitePermissions[permission];
     setSitePermissions((current) => {
       const next = { ...current };
@@ -301,10 +269,8 @@ export const App: React.FC = () => {
         return next;
       });
     }
+    return saved;
   }, [sitePermissions]);
-
-  const activeSiteOrigin = getSiteOrigin(tabs.find((tab) => tab.id === activeTabId)?.url);
-  const activeSiteTranslationMode = activeSiteOrigin ? (settings.siteTranslation?.[activeSiteOrigin] || 'ask') : 'ask';
 
   // Select Tab
   const handleSelectTab = useCallback((tabId: string) => {
@@ -334,20 +300,21 @@ export const App: React.FC = () => {
 
   // Tab Operations
   const handleNewTab = useCallback(
-    (initialUrl = NEW_TAB_URL, options?: { select?: boolean; workspaceId?: string }): string | null => {
+    (initialUrl = NEW_TAB_URL, options?: { select?: boolean; workspaceId?: string; id?: string }): string | null => {
       if (isExternalProtocolUrl(initialUrl)) {
         window.electronAPI?.openExternal(initialUrl);
         return null;
       }
-      const safeUrl = normalizeTabUrl(initialUrl) || NEW_TAB_URL;
+      const requestedUrl = normalizeTabUrl(initialUrl) || NEW_TAB_URL;
+      const safeUrl = isIncognito && isSettingsUrl(requestedUrl) ? NEW_TAB_URL : requestedUrl;
       const workspaceId = options?.workspaceId || activeWorkspaceIdRef.current;
       if (!workspacesRef.current.some((workspace) => workspace.id === workspaceId)) return null;
       const shouldSelect = options?.select !== false;
       const newTab: Tab = {
-        id: makeTabId(),
+        id: options?.id || makeTabId(),
         url: safeUrl,
-        title: isNewTabUrl(safeUrl) ? '새 탭' : '로딩 중...',
-        isLoading: !isNewTabUrl(safeUrl),
+        title: isInternalPageUrl(safeUrl) ? internalPageTitle(safeUrl) : '로딩 중...',
+        isLoading: !isInternalPageUrl(safeUrl),
         canGoBack: false,
         canGoForward: false,
         isPinned: false,
@@ -360,12 +327,20 @@ export const App: React.FC = () => {
       };
 
       if (window.electronAPI) {
-        window.electronAPI.createTab(newTab.id, safeUrl, isIncognito);
+        window.electronAPI.createTab(newTab.id, safeUrl, isIncognito, workspaceId);
         if (shouldSelect) window.electronAPI.switchTab(newTab.id);
       }
 
-      setTabs((prev) => [...prev, newTab]);
-      if (shouldSelect) setActiveTabId(newTab.id);
+      // A native extension may select or close its tab immediately after
+      // create() resolves, before React has committed the adoption render.
+      if (options?.id && !tabsRef.current.some((tab) => tab.id === newTab.id)) {
+        tabsRef.current = [...tabsRef.current, newTab];
+      }
+      setTabs((prev) => prev.some((tab) => tab.id === newTab.id) ? prev : [...prev, newTab]);
+      if (shouldSelect) {
+        if (options?.id) activeTabIdRef.current = newTab.id;
+        setActiveTabId(newTab.id);
+      }
       return newTab.id;
     },
     [isIncognito]
@@ -400,18 +375,20 @@ export const App: React.FC = () => {
   }, [handleNewTab]);
 
   const handleCreateWorkspace = useCallback(() => {
+    if (isIncognito) return;
     setWorkspaceNameEditingId(null);
     setWorkspaceNameDraft(`워크스페이스 ${workspacesRef.current.length + 1}`);
     setIsWorkspaceNameOpen(true);
-  }, []);
+  }, [isIncognito]);
 
   const handleRenameWorkspace = useCallback(() => {
+    if (isIncognito) return;
     const activeWorkspace = workspacesRef.current.find((workspace) => workspace.id === activeWorkspaceIdRef.current);
     if (!activeWorkspace) return;
     setWorkspaceNameEditingId(activeWorkspace.id);
     setWorkspaceNameDraft(activeWorkspace.name);
     setIsWorkspaceNameOpen(true);
-  }, []);
+  }, [isIncognito]);
 
   const handleConfirmCreateWorkspace = useCallback(() => {
     const name = workspaceNameDraft.trim();
@@ -457,11 +434,6 @@ export const App: React.FC = () => {
     const remainingTabs = tabsRef.current.filter((tab) => tab.workspaceId !== deletingId);
     const nextWorkspaceTabs = remainingTabs.filter((tab) => tab.workspaceId === nextWorkspace.id);
     setTabs(remainingTabs);
-    setPageTranslatedTabIds((prev) => {
-      const next = new Set(prev);
-      deletingTabs.forEach((tab) => next.delete(tab.id));
-      return next;
-    });
     persistWorkspaceState(nextWorkspaces, nextWorkspace.id);
     activeWorkspaceIdRef.current = nextWorkspace.id;
     setSplitEnabled(false);
@@ -521,12 +493,6 @@ export const App: React.FC = () => {
       }
 
       let nextTabs = currentTabs.filter((t) => t.id !== tabId);
-      setPageTranslatedTabIds((prev) => {
-        if (!prev.has(tabId)) return prev;
-        const next = new Set(prev);
-        next.delete(tabId);
-        return next;
-      });
 
       if (tabId === activeTabIdRef.current) {
         const sameWorkspaceTabs = nextTabs.filter((tab) => tab.workspaceId === tabToClose.workspaceId);
@@ -538,7 +504,7 @@ export const App: React.FC = () => {
             workspaceId: tabToClose.workspaceId || activeWorkspaceIdRef.current,
           };
           nextTabs = [...nextTabs, freshTab];
-          if (window.electronAPI) window.electronAPI.createTab(freshTab.id, freshTab.url, isIncognito);
+          if (window.electronAPI) window.electronAPI.createTab(freshTab.id, freshTab.url, isIncognito, freshTab.workspaceId);
         }
         const candidates = nextTabs.filter((tab) => tab.workspaceId === tabToClose.workspaceId);
         const candidateIndex = Math.min(tabIndex, candidates.length - 1);
@@ -592,7 +558,7 @@ export const App: React.FC = () => {
     const safeUrl = updates.url === undefined ? current.url : normalizeTabUrl(updates.url);
     if (!safeUrl) return;
     const normalizedUpdates = { ...updates, url: safeUrl };
-    const shouldRecordHistory = settings.saveBrowsingHistory && !updates.error && !isIncognito && window.electronAPI && !isNewTabUrl(safeUrl) &&
+    const shouldRecordHistory = settings.saveBrowsingHistory && !updates.error && !isIncognito && window.electronAPI && !isInternalPageUrl(safeUrl) &&
       (safeUrl !== current.url || (Boolean(updates.title) && updates.title !== current.title));
     if (shouldRecordHistory) {
       const historyTitle = updates.title || current.title;
@@ -606,16 +572,11 @@ export const App: React.FC = () => {
         return [{ id: `local-${visitedAt}-${Math.random().toString(36).slice(2, 7)}`, url: safeUrl, title: historyTitle, visitedAt }, ...prev].slice(0, 2000);
       });
     }
-    if (safeUrl !== current.url || updates.isLoading === true) {
-      setPageTranslatedTabIds((prev) => {
-        if (!prev.has(tabId)) return prev;
-        const next = new Set(prev);
-        next.delete(tabId);
-        return next;
-      });
-      if (tabId === activeTabIdRef.current) setPageTranslationStatus('idle');
-    }
-    setTabs((prev) => prev.map((tab) => tab.id === tabId ? { ...tab, ...normalizedUpdates, lastAccessed: Date.now() } : tab));
+    setTabs((prev) => {
+      const tab = prev.find(item => item.id === tabId);
+      if (!tab || Object.entries(normalizedUpdates).every(([key, value]) => tab[key as keyof Tab] === value)) return prev;
+      return prev.map(item => item.id === tabId ? { ...item, ...normalizedUpdates, lastAccessed: Date.now() } : item);
+    });
   }, [isIncognito, settings.saveBrowsingHistory]);
 
   const handleReorderTabs = useCallback((sourceId: string, targetId: string) => {
@@ -715,50 +676,44 @@ export const App: React.FC = () => {
 
   // Settings updater
   const handleUpdateSettings = useCallback(async (updates: Partial<BrowserSettings>) => {
-    setSettings((prev) => ({ ...prev, ...updates }));
     if (window.electronAPI) {
       try {
         const persisted = await window.electronAPI.updateSettings(updates);
         setSettings(persisted);
       } catch (error) {
         console.error('Failed to persist settings:', error);
+        return false;
       }
+    } else {
+      setSettings((prev) => ({ ...prev, ...updates }));
     }
+    return true;
   }, []);
-
-  const handleSiteTranslationModeChange = useCallback((mode: 'always' | 'never' | 'ask') => {
-    const origin = getSiteOrigin(tabsRef.current.find((tab) => tab.id === activeTabIdRef.current)?.url);
-    if (!origin) return;
-    const next = { ...settings.siteTranslation };
-    if (mode === 'ask') delete next[origin];
-    else next[origin] = mode;
-    void handleUpdateSettings({ siteTranslation: next });
-  }, [handleUpdateSettings, settings.siteTranslation]);
 
   const handleCloseSettings = useCallback(() => {
-    setIsSettingsOpen(false);
-  }, []);
+    const id = activeTabIdRef.current;
+    if (id && isSettingsUrl(tabsRef.current.find((tab) => tab.id === id)?.url)) handleCloseTab(id);
+  }, [handleCloseTab]);
 
-  // Favorites Handlers
-  const handleAddFavorite = useCallback(async (title: string, url: string) => {
-    try {
-      if (window.electronAPI) {
-        const item = await window.electronAPI.addFavorite({ title, url });
-        setFavorites((prev) => [item, ...prev.filter((favorite) => favorite.url !== item.url)].slice(0, 12));
-      } else {
-        setFavorites((prev) => [{ id: `fav-${Date.now()}`, title, url }, ...prev].slice(0, 12));
-      }
-    } catch (error) {
-      console.error('Failed to add favorite:', error);
+  const handleOpenSettings = useCallback((section: SettingsSection = 'general') => {
+    if (isIncognito) return;
+    setIsSiteInfoOpen(false);
+    setIsAsideOpen(false);
+    setSplitEnabled(false);
+    setSplitSecondaryTabId(null);
+    window.electronAPI?.setSplitView(false);
+    const url = settingsUrl(section);
+    const existing = tabsRef.current.find((tab) => tab.workspaceId === activeWorkspaceIdRef.current && isSettingsUrl(tab.url));
+    if (!existing) {
+      handleNewTab(url);
+      return;
     }
-  }, []);
-
-  const handleRemoveFavorite = useCallback(async (id: string) => {
-    if (window.electronAPI) {
-      await window.electronAPI.removeFavorite(id);
-    }
-    setFavorites((prev) => prev.filter((f) => f.id !== id));
-  }, []);
+    setTabs((prev) => prev.map((tab) => tab.id === existing.id ? { ...tab, url, title: '설정', isLoading: false, error: undefined } : tab));
+    setActiveTabId(existing.id);
+    activeTabIdRef.current = existing.id;
+    window.electronAPI?.navigateTab(existing.id, url);
+    window.electronAPI?.switchTab(existing.id);
+  }, [handleNewTab, isIncognito]);
 
   const handleToggleBookmark = useCallback(async () => {
     const tab = tabsRef.current.find((item) => item.id === activeTabIdRef.current);
@@ -815,24 +770,6 @@ export const App: React.FC = () => {
       };
     });
 
-    // 2. Persistent browser data is intentionally not exposed in a private
-    // window. Bookmarks are persistent by design, but history/downloads are
-    // browsing records and must remain isolated.
-    if (!isIncognito) {
-      api.getFavorites().then((favs) => {
-        if (!cancelled) setFavorites(favs || []);
-      }).catch((error) => console.error('Failed to load favorites:', error));
-    }
-
-    // 3. AdBlock Stats
-    api.getAdBlockStats().then((stat) => {
-      if (!cancelled && stat) setBlockedCount(stat.blockedCount);
-    }).catch((error) => console.error('Failed to load ad blocker stats:', error));
-
-    const unsubAdBlock = api.onAdBlocked((cnt) => {
-      setBlockedCount(cnt);
-    });
-
     // 4. Session Restore (or Startup pages). Private windows always start
     // clean unless an explicit URL was supplied by the caller.
     const createTabState = (url: string, id = makeTabId(), pinned = false, workspaceId = activeWorkspaceIdRef.current): Tab => {
@@ -840,8 +777,8 @@ export const App: React.FC = () => {
       return {
         id,
         url: safeUrl,
-        title: isNewTabUrl(safeUrl) ? '새 탭' : '로딩 중...',
-        isLoading: !isNewTabUrl(safeUrl),
+        title: isInternalPageUrl(safeUrl) ? internalPageTitle(safeUrl) : '로딩 중...',
+        isLoading: !isInternalPageUrl(safeUrl),
         canGoBack: false,
         canGoForward: false,
         isPinned: pinned,
@@ -864,8 +801,9 @@ export const App: React.FC = () => {
       const availableWorkspaces = loadedWorkspaceState.workspaces?.length
         ? loadedWorkspaceState.workspaces
         : [{ id: isIncognito ? PRIVATE_WORKSPACE_ID : DEFAULT_WORKSPACE_ID, name: isIncognito ? '시크릿' : 'work', color: isIncognito ? '#8b5cf6' : '#3b82f6' }];
-      const loadedActiveWorkspaceId = availableWorkspaces.some((workspace) => workspace.id === loadedWorkspaceState.activeWorkspaceId)
-        ? loadedWorkspaceState.activeWorkspaceId
+      const requestedWorkspace = new URLSearchParams(window.location.search).get('workspaceId') || loadedWorkspaceState.activeWorkspaceId;
+      const loadedActiveWorkspaceId = availableWorkspaces.some((workspace) => workspace.id === requestedWorkspace)
+        ? requestedWorkspace
         : availableWorkspaces[0].id;
       if (!cancelled) {
         setWorkspaces(availableWorkspaces);
@@ -886,12 +824,12 @@ export const App: React.FC = () => {
         const seenIds = new Set<string>();
         initialTabs = sessionState.tabs
           .filter((tab) => tab.id && !seenIds.has(tab.id) && (seenIds.add(tab.id), true))
-          .map((tab) => createTabState(
+          .map((tab) => ({ ...createTabState(
             tab.url || NEW_TAB_URL,
             tab.id,
             tab.pinned,
             availableWorkspaces.some((workspace) => workspace.id === tab.workspaceId) ? tab.workspaceId : loadedActiveWorkspaceId,
-          ));
+          ), title: tab.title || (isInternalPageUrl(tab.url) ? internalPageTitle(tab.url) : '로딩 중...') }));
       } else if (loadedSettings.startupBehavior === 'specific' && loadedSettings.startupPages?.length) {
         initialTabs = loadedSettings.startupPages.map((url) => createTabState(url, makeTabId(), false, loadedActiveWorkspaceId));
       } else {
@@ -907,10 +845,14 @@ export const App: React.FC = () => {
         : initialTabs.find((tab) => tab.workspaceId === loadedActiveWorkspaceId)?.id || initialTabs[0].id;
       initialTabs = initialTabs.map((tab) => ({
         ...tab,
+        isLoading: tab.id === restoredActiveId && !isInternalPageUrl(tab.url),
         lifecycle: tab.id === restoredActiveId ? 'active' : 'background',
       }));
 
-      initialTabs.forEach((tab) => api.createTab(tab.id, tab.url, isIncognito));
+      // Restore metadata immediately, but don't start every invisible document
+      // (and its renderer/network work) during startup. New user-opened tabs
+      // still load in the background normally; already-open pages stay alive.
+      initialTabs.forEach((tab) => api.createTab(tab.id, tab.url, isIncognito, tab.workspaceId, tab.id !== restoredActiveId));
       setTabs(initialTabs);
       setActiveTabId(restoredActiveId);
       api.switchTab(restoredActiveId);
@@ -1005,9 +947,9 @@ export const App: React.FC = () => {
 
     const unsubGesture = api.onTabGesture((data) => {
         if (data.action === 'back') {
-          handleGoBack();
+          api.goBackTab(data.tabId);
         } else if (data.action === 'forward') {
-          handleGoForward();
+          api.goForwardTab(data.tabId);
         }
         else if (data.action === 'reload') handleReload();
     });
@@ -1042,18 +984,14 @@ export const App: React.FC = () => {
           case 'menu:open-library':
             setIsLibraryOpen(true);
             break;
-          case 'menu:open-command-palette':
-            setIsCommandPaletteOpen(true);
-            break;
           case 'menu:open-settings':
-            setSettingsTab('general');
-            setIsSettingsOpen(true);
+            handleOpenSettings();
             break;
           case 'menu:open-about':
-            setSettingsTab('about');
-            setIsSettingsOpen(true);
+            handleOpenSettings('about');
             break;
           case 'menu:toggle-aside':
+            setIsSiteInfoOpen(false);
             setIsAsideOpen((p) => !p);
             break;
           case 'menu:reload':
@@ -1086,7 +1024,6 @@ export const App: React.FC = () => {
 
     return () => {
       cancelled = true;
-      unsubAdBlock();
       unsubDownload();
       unsubDownloadsCleared();
       unsubExternal();
@@ -1102,7 +1039,26 @@ export const App: React.FC = () => {
       unsubGesture();
       unsubMenu();
     };
-  }, [isIncognito, handleNewTab, splitRatio]);
+  }, [isIncognito, handleNewTab, handleOpenSettings, splitRatio]);
+
+  // Keep native extension events current without rerunning startup restore
+  // whenever split/workspace-dependent callbacks change.
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api || isIncognito) return;
+    const created = api.onExtensionTabCreated((data) => {
+      if (data.active && data.workspaceId && data.workspaceId !== activeWorkspaceIdRef.current) handleSelectWorkspace(data.workspaceId);
+      handleNewTab(data.url, { select: data.active, id: data.id, workspaceId: data.workspaceId });
+    });
+    const selected = api.onExtensionTabSelected((id) => {
+      const tab = tabsRef.current.find((item) => item.id === id);
+      if (!tab) return;
+      if (tab.workspaceId && tab.workspaceId !== activeWorkspaceIdRef.current) handleSelectWorkspace(tab.workspaceId);
+      handleSelectTab(id);
+    });
+    const closed = api.onExtensionTabClosed((id) => handleCloseTab(id));
+    return () => { created(); selected(); closed(); };
+  }, [isIncognito, handleNewTab, handleSelectWorkspace, handleSelectTab, handleCloseTab]);
 
   // Save session on tab changes (disabled in incognito)
   useEffect(() => {
@@ -1114,14 +1070,24 @@ export const App: React.FC = () => {
         pinned: t.isPinned,
         workspaceId: t.workspaceId,
       }));
+      const signature = JSON.stringify({ tabs: sessionTabs, activeTabId });
+      if (signature === lastSavedSessionRef.current) return;
+      lastSavedSessionRef.current = signature;
       window.electronAPI.saveSession(sessionTabs, activeTabId);
     }
   }, [tabs, activeTabId, isIncognito, sessionReady, crashRecovery]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  const isPageTranslated = activeTabId ? pageTranslatedTabIds.has(activeTabId) : false;
-  const isNewTabPage = isNewTabUrl(activeTab?.url);
+  const isNewTabPage = isNewTabUrl(activeTab?.url) || (isIncognito && isSettingsUrl(activeTab?.url));
+  const isSettingsPage = !isIncognito && isSettingsUrl(activeTab?.url);
   const isHtmlFullscreen = Boolean(htmlFullscreenTabId);
+
+  useEffect(() => {
+    if (!isSettingsPage || !splitEnabled) return;
+    setSplitEnabled(false);
+    setSplitSecondaryTabId(null);
+    window.electronAPI?.setSplitView(false);
+  }, [isSettingsPage, splitEnabled]);
 
   const handleRestoreCrashSession = useCallback(async () => {
     if (!crashRecovery || !window.electronAPI) return;
@@ -1136,7 +1102,7 @@ export const App: React.FC = () => {
         id: item.id,
         url: safeUrl,
         title: item.title || (isNewTabUrl(safeUrl) ? '새 탭' : '로딩 중...'),
-        isLoading: !isNewTabUrl(safeUrl),
+        isLoading: !isInternalPageUrl(safeUrl),
         canGoBack: false,
         canGoForward: false,
         isPinned: item.pinned,
@@ -1161,8 +1127,8 @@ export const App: React.FC = () => {
     const selectedWorkspaceId = selected.workspaceId || activeWorkspaceIdRef.current;
     activeWorkspaceIdRef.current = selectedWorkspaceId;
     setActiveWorkspaceId(selectedWorkspaceId);
-    const nextTabs = restoredTabs.map((tab) => ({ ...tab, lifecycle: tab.id === selected.id ? 'active' as const : 'background' as const }));
-    nextTabs.forEach((tab) => window.electronAPI?.createTab(tab.id, tab.url, false));
+    const nextTabs = restoredTabs.map((tab) => ({ ...tab, isLoading: tab.id === selected.id && !isInternalPageUrl(tab.url), lifecycle: tab.id === selected.id ? 'active' as const : 'background' as const }));
+    nextTabs.forEach((tab) => window.electronAPI?.createTab(tab.id, tab.url, false, tab.workspaceId, tab.id !== selected.id));
     window.electronAPI.switchTab(selected.id);
     setSplitEnabled(false);
     setSplitSecondaryTabId(null);
@@ -1177,10 +1143,6 @@ export const App: React.FC = () => {
     await window.electronAPI?.resolveCrashRecovery();
     setCrashRecovery(null);
   }, []);
-
-  useEffect(() => {
-    setPageTranslationStatus(activeTabId && pageTranslatedTabIds.has(activeTabId) ? 'translated' : 'idle');
-  }, [activeTabId]);
 
   // Zoom is stored per web origin. Load it whenever the selected tab or its
   // origin changes, and apply it to the native WebContentsView for that tab.
@@ -1208,18 +1170,6 @@ export const App: React.FC = () => {
     };
   }, [activeTabId, activeTab?.url]);
 
-  // A navigation or reload creates a fresh document, so the old tab-level
-  // translation flag must not survive it.
-  useEffect(() => {
-    if (!activeTabId || (!activeTab?.isLoading && !isNewTabUrl(activeTab?.url))) return;
-    setPageTranslatedTabIds((prev) => {
-      if (!prev.has(activeTabId)) return prev;
-      const next = new Set(prev);
-      next.delete(activeTabId);
-      return next;
-    });
-  }, [activeTabId, activeTab?.url, activeTab?.isLoading]);
-
   // Navigation handlers
   const handleNavigate = useCallback(
     (url: string) => {
@@ -1227,20 +1177,21 @@ export const App: React.FC = () => {
         window.electronAPI?.openExternal(url);
         return;
       }
-      const safeUrl = normalizeTabUrl(url);
-      if (!safeUrl) return;
+      const requestedUrl = normalizeTabUrl(url);
+      if (!requestedUrl) return;
+      const safeUrl = isIncognito && isSettingsUrl(requestedUrl) ? NEW_TAB_URL : requestedUrl;
       if (activeTabId) {
         handleUpdateTab(activeTabId, {
           url: safeUrl,
-          title: isNewTabUrl(safeUrl) ? '새 탭' : '로딩 중...',
-          isLoading: !isNewTabUrl(safeUrl),
+          title: isInternalPageUrl(safeUrl) ? internalPageTitle(safeUrl) : '로딩 중...',
+          isLoading: !isInternalPageUrl(safeUrl),
         });
         window.electronAPI?.navigateTab(activeTabId, safeUrl);
       } else {
         handleNewTab(safeUrl);
       }
     },
-    [activeTabId, handleUpdateTab, handleNewTab]
+    [activeTabId, handleUpdateTab, handleNewTab, isIncognito]
   );
 
   const handleSearchExecuted = useCallback((result: NavigationResult) => {
@@ -1275,18 +1226,17 @@ export const App: React.FC = () => {
     const target = parseNavigationInput(query, {
       searchEngine: settings.searchEngine,
       customSearchUrl: settings.customSearchUrl,
-      searchShortcuts: settings.searchShortcuts,
     });
     handleSearchExecuted(target);
     handleNavigate(target.url);
     setIsLibraryOpen(false);
-  }, [handleNavigate, handleSearchExecuted, settings.searchEngine, settings.customSearchUrl, settings.searchShortcuts]);
+  }, [handleNavigate, handleSearchExecuted, settings.searchEngine, settings.customSearchUrl]);
 
   // Sync modal overlay state with native WebContentsView
   useEffect(() => {
-    const hasOverlay = isSettingsOpen || !settingsReady || shouldShowFirstRun || isCommandPaletteOpen || isFindOpen || isSiteInfoOpen || isWorkspaceNameOpen || isLibraryOpen || pageSource !== null || Boolean(activeTab?.error) || permissionRequests.length > 0;
+    const hasOverlay = !settingsReady || shouldShowFirstRun || isWorkspaceNameOpen || isLibraryOpen || pageSource !== null || Boolean(activeTab?.error) || permissionRequests.length > 0;
     window.electronAPI?.setTabOverlay(hasOverlay);
-  }, [isSettingsOpen, settingsReady, shouldShowFirstRun, isCommandPaletteOpen, isFindOpen, isSiteInfoOpen, isWorkspaceNameOpen, isLibraryOpen, pageSource, activeTab?.error, permissionRequests.length]);
+  }, [settingsReady, shouldShowFirstRun, isWorkspaceNameOpen, isLibraryOpen, pageSource, activeTab?.error, permissionRequests.length]);
 
   const handleGoBack = useCallback(() => {
     webviewContainerRef.current?.goBack();
@@ -1308,73 +1258,14 @@ export const App: React.FC = () => {
     handleNavigate(NEW_TAB_URL);
   }, [handleNavigate]);
 
-  const handleOpenDrawerTranslate = useCallback((text: string) => {
-    setExternalTranslateText(text);
-    setIsAsideOpen(true);
-  }, []);
-
   const handleFoundInPage = useCallback((res: { activeMatchOrdinal: number; matches: number }) => {
     setFindMatchIndex(res.activeMatchOrdinal);
     setFindMatchTotal(res.matches);
   }, []);
 
-  // One-click Korean Translation (In-Page DOM In-Place Translation)
-  const handleTranslatePage = useCallback(async () => {
-    if (!activeTabId || isTranslating || isNewTabPage) return;
-    const wasTranslated = pageTranslatedTabIdsRef.current.has(activeTabId);
-    setIsTranslating(true);
-    setPageTranslationStatus(wasTranslated ? 'restoring' : 'translating');
-    try {
-      const isNowTranslated = await webviewContainerRef.current?.toggleTranslatePage();
-      setPageTranslatedTabIds((prev) => {
-        const next = new Set(prev);
-        if (isNowTranslated) {
-          next.add(activeTabId);
-        } else {
-          next.delete(activeTabId);
-        }
-        return next;
-      });
-      if (isNowTranslated) {
-        setPageTranslationStatus('translated');
-        setTranslateToast({ text: '페이지 번역 완료' });
-      } else if (wasTranslated) {
-        setPageTranslationStatus('idle');
-        setTranslateToast({ text: '원문 페이지로 복원됨' });
-      } else {
-        setPageTranslationStatus('failed');
-        setTranslateToast({ text: '번역할 텍스트가 없거나 온라인 번역에 실패했습니다.' });
-      }
-      setTimeout(() => {
-        setTranslateToast(null);
-      }, 1800);
-    } catch (e) {
-      console.error('Translation error:', e);
-      setPageTranslationStatus('failed');
-      setTranslateToast({ text: '번역 중 오류가 발생했습니다.' });
-      setTimeout(() => setTranslateToast(null), 2200);
-    } finally {
-      setIsTranslating(false);
-    }
-  }, [activeTabId, isTranslating, isNewTabPage]);
-
-  useEffect(() => {
-    if (!activeSiteOrigin || activeSiteTranslationMode !== 'always' || !activeTab || activeTab.isLoading || activeTab.error || pageTranslatedTabIdsRef.current.has(activeTab.id)) return;
-    const timer = window.setTimeout(() => { void handleTranslatePage(); }, 500);
-    return () => window.clearTimeout(timer);
-  }, [activeSiteOrigin, activeSiteTranslationMode, activeTab?.id, activeTab?.isLoading, activeTab?.error, handleTranslatePage]);
-
-  // Listen for IPC commands (OS app-command navigation, context-menu translations)
+  // Listen for OS navigation commands.
   useEffect(() => {
     if (!window.electronAPI) return;
-
-    const unsubTranslate = window.electronAPI.onTranslateActive(() => {
-      handleTranslatePage();
-    });
-
-    const unsubSelectionTranslate = window.electronAPI.onSelectionTranslate((text) => {
-      handleOpenDrawerTranslate(text);
-    });
 
     const unsubAppBack = window.electronAPI.onNavBackward(() => {
       handleGoBack();
@@ -1385,12 +1276,10 @@ export const App: React.FC = () => {
     });
 
     return () => {
-      unsubTranslate();
-      unsubSelectionTranslate();
       unsubAppBack();
       unsubAppForward();
     };
-  }, [handleTranslatePage, handleOpenDrawerTranslate, handleGoBack, handleGoForward]);
+  }, [handleGoBack, handleGoForward]);
 
   // Native WebContentsView consumes keyboard input before the React chrome
   // can see it. Relay tab-switch shortcuts back into the React tab model.
@@ -1473,30 +1362,6 @@ export const App: React.FC = () => {
     if (origin) void window.electronAPI?.setSiteZoom(origin, 1.0);
   }, []);
 
-  // Copy helpers
-  const handleCopyUrl = () => {
-    if (activeTab?.url) void navigator.clipboard.writeText(activeTab.url).catch(() => {});
-  };
-
-  const handleCopyOrigin = () => {
-    const origin = getSiteOrigin(activeTab?.url);
-    if (origin) void navigator.clipboard.writeText(origin).catch(() => {});
-  };
-
-  const handleCopyTitle = useCallback(() => {
-    if (activeTab?.title) void navigator.clipboard.writeText(activeTab.title).catch(() => {});
-  }, [activeTab?.title]);
-
-  const handleCopyTitleUrl = useCallback(() => {
-    if (activeTab?.url) void navigator.clipboard.writeText(`${activeTab.title || activeTab.url}\n${activeTab.url}`).catch(() => {});
-  }, [activeTab?.title, activeTab?.url]);
-
-  const handleViewSource = useCallback(async () => {
-    if (!activeTabId || !/^https?:\/\//i.test(activeTab?.url || '')) return;
-    const source = await window.electronAPI?.getPageSource(activeTabId);
-    if (source) setPageSource(source);
-  }, [activeTabId, activeTab?.url]);
-
   // Keyboard Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1505,18 +1370,12 @@ export const App: React.FC = () => {
       // Settings: ⌘,
       if (isCmd && e.key === ',') {
         e.preventDefault();
-        setSettingsTab('general');
-        setIsSettingsOpen((p) => !p);
+        handleOpenSettings();
       }
       // DevTools: ⌥⌘I or F12
       else if ((isCmd && e.altKey && e.key.toLowerCase() === 'i') || e.key === 'F12') {
         e.preventDefault();
         handleToggleDevTools();
-      }
-      // Translate Page: ⌥⌘T
-      else if (isCmd && e.altKey && e.key.toLowerCase() === 't') {
-        e.preventDefault();
-        handleTranslatePage();
       }
       // Reopen closed tab: ⌘⇧T
       else if (isCmd && e.shiftKey && e.key.toLowerCase() === 't') {
@@ -1534,7 +1393,7 @@ export const App: React.FC = () => {
         void handleUpdateSettings({ showBookmarkBar: !settings.showBookmarkBar });
       }
       // New Tab: ⌘T
-      else if (isCmd && !e.shiftKey && e.key.toLowerCase() === 't') {
+      else if (isCmd && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
         handleNewTab();
       }
@@ -1568,14 +1427,10 @@ export const App: React.FC = () => {
         e.preventDefault();
         handleOpenFind();
       }
-      // Command Palette: ⌘K
-      else if (isCmd && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-      }
       // Aside Drawer: ⌘\
       else if (isCmd && e.key === '\\') {
         e.preventDefault();
+        setIsSiteInfoOpen(false);
         setIsAsideOpen((prev) => !prev);
       }
       // Back: ⌘[
@@ -1635,6 +1490,7 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     handleNewTab,
+    handleOpenSettings,
     handleOpenFile,
     handlePrintPage,
     handleToggleBookmark,
@@ -1643,7 +1499,6 @@ export const App: React.FC = () => {
     handleCloseTab,
     handleReopenClosedTab,
     handleToggleDevTools,
-    handleTranslatePage,
     handleOpenFind,
     handleChangeZoom,
     handleResetZoom,
@@ -1657,13 +1512,13 @@ export const App: React.FC = () => {
   ]);
 
   return (
-    <div className={`aero-app theme-transition flex flex-col h-screen w-screen overflow-hidden bg-[var(--chrome-bg)] font-sans text-[var(--text-primary)] antialiased select-none ${isIncognito ? 'aero-private' : ''}`} data-private={isIncognito ? 'true' : 'false'}>
+    <div className={`null-app theme-transition flex flex-col h-screen w-screen overflow-hidden bg-[var(--chrome-bg)] font-sans text-[var(--text-primary)] antialiased select-none ${isIncognito ? 'null-private' : ''}`} data-private={isIncognito ? 'true' : 'false'} data-platform={window.electronAPI?.platform || 'web'}>
       <div
-        className={`aero-connected-chrome flex-none ${isHtmlFullscreen ? 'hidden' : ''}`}
+        className={`null-connected-chrome flex-none ${isHtmlFullscreen ? 'hidden' : ''}`}
       >
-      {/* 1. Workspace switcher and native split-view controls. Keep this row
-          separate so macOS traffic lights never share a hit area with tabs. */}
-      <WorkspaceBar
+      {/* Normal windows show workspace controls. Private windows reserve
+          native window-control space directly in the tab row instead. */}
+      {!isIncognito && <WorkspaceBar
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         tabs={tabs}
@@ -1678,17 +1533,17 @@ export const App: React.FC = () => {
         onToggleSplit={handleToggleSplit}
         onSelectSplitTab={handleSelectSplitTab}
         onSplitRatioChange={handleSplitRatioChange}
-      />
+      />}
 
-      {isWorkspaceNameOpen && (
-        <div className="aero-overlay fixed inset-0 z-[60] flex items-start justify-center pt-20" onClick={() => { setWorkspaceNameEditingId(null); setIsWorkspaceNameOpen(false); }}>
+      {!isIncognito && isWorkspaceNameOpen && (
+        <div className="null-overlay fixed inset-0 z-[60] flex items-start justify-center pt-20" onClick={() => { setWorkspaceNameEditingId(null); setIsWorkspaceNameOpen(false); }}>
           <form
             onSubmit={(event) => {
               event.preventDefault();
               handleConfirmCreateWorkspace();
             }}
             onClick={(event) => event.stopPropagation()}
-            className="aero-modal w-[min(22rem,calc(100vw-2rem))] p-4 text-[var(--text-primary)]"
+            className="null-modal w-[min(22rem,calc(100vw-2rem))] p-4 text-[var(--text-primary)]"
           >
             <div className="mb-3 text-sm font-semibold">{workspaceNameEditingId ? '워크스페이스 이름 수정' : '새 워크스페이스'}</div>
             <input
@@ -1699,14 +1554,14 @@ export const App: React.FC = () => {
                 if (event.key === 'Escape') { setWorkspaceNameEditingId(null); setIsWorkspaceNameOpen(false); }
               }}
               placeholder="이름 입력"
-              className="aero-field h-9 w-full px-3 text-sm outline-none"
+              className="null-field h-9 w-full px-3 text-sm outline-none"
               aria-label="워크스페이스 이름"
             />
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => { setWorkspaceNameEditingId(null); setIsWorkspaceNameOpen(false); }} className="aero-quiet-button border-transparent px-3 py-1.5 text-xs">
+              <button type="button" onClick={() => { setWorkspaceNameEditingId(null); setIsWorkspaceNameOpen(false); }} className="null-quiet-button border-transparent px-3 py-1.5 text-xs">
                 취소
               </button>
-              <button type="submit" disabled={!workspaceNameDraft.trim()} className="aero-primary-button px-3 py-1.5 text-xs font-medium">
+              <button type="submit" disabled={!workspaceNameDraft.trim()} className="null-primary-button px-3 py-1.5 text-xs font-medium">
                 {workspaceNameEditingId ? '저장' : '만들기'}
               </button>
             </div>
@@ -1728,24 +1583,22 @@ export const App: React.FC = () => {
         onCloseOtherTabs={handleCloseOtherTabs}
         onCloseTabsToRight={handleCloseTabsToRight}
         onReloadTab={handleReloadTab}
-        onToggleAside={() => setIsAsideOpen((prev) => !prev)}
+        onToggleAside={() => { setIsSiteInfoOpen(false); setIsAsideOpen((prev) => !prev); }}
         onReorderTabs={handleReorderTabs}
       />
 
-      {/* 3. Omnibox Toolbar with Site Info Popover, Search Shortcuts, Zoom */}
+      {/* 3. Omnibox Toolbar with Site controls and zoom */}
       <AddressBar
+        isIncognito={isIncognito}
+        onNewPrivateWindow={() => window.electronAPI?.newPrivateWindow()}
+        workspaceId={activeWorkspaceId}
         activeTab={activeTab}
         searchEngine={settings.searchEngine}
-        searchShortcuts={settings.searchShortcuts}
         customSearchUrl={settings.customSearchUrl}
-        isPageTranslated={isPageTranslated}
         isBookmarked={Boolean(activeTab?.url && bookmarks.some((bookmark) => bookmark.url === activeTab.url))}
-        isTranslating={isTranslating}
         isAsideOpen={isAsideOpen}
-        tabs={workspaceTabs}
-        bookmarks={bookmarks}
-        searchHistory={searchHistory}
-        includeSearchHistory={settings.saveSearchHistory}
+        isSiteInfoOpen={isSiteInfoOpen}
+        onToggleSiteInfo={() => { setIsAsideOpen(false); setIsSiteInfoOpen(open => !open); }}
         zoomLevel={zoomLevel}
         onNavigate={handleNavigate}
         onSearchExecuted={handleSearchExecuted}
@@ -1753,23 +1606,14 @@ export const App: React.FC = () => {
         onGoForward={handleGoForward}
         onReload={handleReload}
         onGoHome={handleGoHome}
-        onTranslatePage={handleTranslatePage}
         onToggleDevTools={handleToggleDevTools}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenSettings={() => handleOpenSettings()}
         onToggleAside={() => setIsAsideOpen((prev) => !prev)}
         onResetZoom={handleResetZoom}
-        onZoomIn={() => handleChangeZoom(0.1)}
-        onZoomOut={() => handleChangeZoom(-0.1)}
-        onToggleMuteTab={handleToggleMuteTab}
         onToggleBookmark={handleToggleBookmark}
-        onSiteInfoOpenChange={setIsSiteInfoOpen}
-        sitePermissions={sitePermissions}
-        onSitePermissionChange={handleSitePermissionChange}
-        siteTranslationMode={activeSiteTranslationMode}
-        onSiteTranslationModeChange={handleSiteTranslationModeChange}
       />
       {settings.showBookmarkBar && (
-        <div className="aero-bookmark-bar flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar px-3 py-1 titlebar-no-drag" aria-label="북마크 바">
+        <div className="null-bookmark-bar flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar px-3 py-1 titlebar-no-drag" aria-label="북마크 바">
           {bookmarks.length === 0 ? (
             <span className="px-1 text-[10px] text-[var(--text-muted)]">북마크를 추가하면 여기에 표시됩니다.</span>
           ) : bookmarks.slice(0, 40).map((bookmark) => (
@@ -1788,7 +1632,7 @@ export const App: React.FC = () => {
                   handleNewTab(bookmark.url);
                 }
               }}
-              className="aero-bookmark-item inline-flex max-w-44 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--text-secondary)]"
+              className="null-bookmark-item inline-flex max-w-44 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--text-secondary)]"
             >
               <span className="truncate">{bookmark.title || bookmark.url}</span>
             </button>
@@ -1797,163 +1641,34 @@ export const App: React.FC = () => {
       )}
       </div>
 
+      {/* Reserve space for Find; it is not a modal that hides the webpage. */}
+      <FindBar
+        isOpen={isFindOpen}
+        onClose={handleCloseFind}
+        onFind={handleFind}
+        matchIndex={findMatchIndex}
+        matchTotal={findMatchTotal}
+      />
+
       {/* 4. Viewport & Aside Drawer Panel */}
-      <div className="aero-content-stage flex-1 flex min-h-0 relative overflow-hidden">
-        {/* In-Page Translation Status Floating Pill */}
+      <div className="null-content-stage flex-1 flex min-h-0 relative overflow-hidden">
         {crashRecovery && !isHtmlFullscreen && (
-          <div className="aero-popover absolute left-4 right-4 top-3 z-40 flex flex-wrap items-center gap-3 px-4 py-3 text-xs">
+          <div className="null-popover absolute left-4 right-4 top-3 z-40 flex flex-wrap items-center gap-3 px-4 py-3 text-xs">
             <div className="min-w-0 flex-1"><div className="font-medium text-[var(--text-primary)]">이전 실행이 예기치 않게 종료되었습니다.</div><div className="mt-0.5 text-[var(--text-muted)]">이전 일반 창의 탭을 복원할 수 있습니다.</div></div>
-            <button type="button" onClick={() => void handleRestoreCrashSession()} className="aero-primary-button px-3 py-1.5 text-xs">탭 복원</button>
-            <button type="button" onClick={() => void handleStartFreshAfterCrash()} className="aero-quiet-button px-3 py-1.5 text-xs">새로 시작</button>
+            <button type="button" onClick={() => void handleRestoreCrashSession()} className="null-primary-button px-3 py-1.5 text-xs">탭 복원</button>
+            <button type="button" onClick={() => void handleStartFreshAfterCrash()} className="null-quiet-button px-3 py-1.5 text-xs">새로 시작</button>
           </div>
         )}
 
-        {isTranslating && (
-          <div className="aero-popover absolute top-3 right-4 z-40 flex items-center gap-2.5 px-3.5 py-1.5 text-xs text-[var(--text-primary)] pointer-events-none select-none transition-all">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
-            <span className="font-medium tracking-tight">한국어로 페이지 번역 중...</span>
-          </div>
-        )}
-
-        {!isTranslating && translateToast && (
-          <div className="aero-popover absolute top-3 right-4 z-40 flex items-center gap-2 px-3.5 py-1.5 text-xs text-[var(--text-primary)] pointer-events-none select-none transition-all">
-            <Check className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="font-medium tracking-tight">{translateToast.text}</span>
-          </div>
-        )}
-
-        {/* Find in page floating overlay */}
-        <FindBar
-          isOpen={isFindOpen}
-          onClose={handleCloseFind}
-          onFind={handleFind}
-          matchIndex={findMatchIndex}
-          matchTotal={findMatchTotal}
-        />
-
-        {/* Viewport Content: Aero New Tab Page OR Webviews */}
+        {/* Viewport Content: NULL New Tab Page OR Webviews */}
         <div className="flex-1 min-w-0 relative overflow-hidden bg-[var(--chrome-bg)]">
-          {isNewTabPage && !isHtmlFullscreen && (
-            <NewTabPage
-              settings={settings}
-              isIncognito={isIncognito}
-              favorites={favorites}
-              recentHistory={history}
-              openTabs={workspaceTabs}
-              bookmarks={bookmarks}
-              searchHistory={searchHistory}
-              includeSearchHistory={settings.saveSearchHistory}
-              onNavigate={handleNavigate}
-              onSearchExecuted={handleSearchExecuted}
-              onAddFavorite={handleAddFavorite}
-              onRemoveFavorite={handleRemoveFavorite}
-            />
-          )}
-
-          <div className={`w-full h-full ${isNewTabPage && !isHtmlFullscreen ? 'hidden' : 'block'}`}>
-            <WebViewContainer
-              ref={webviewContainerRef}
-              tabs={workspaceTabs}
-              activeTabId={activeTabId}
-              onUpdateTab={handleUpdateTab}
-              onNewTab={handleNewTab}
-              onSelectTab={handleSelectTab}
-              onFoundInPage={handleFoundInPage}
-              onOpenDrawerTranslate={handleOpenDrawerTranslate}
-            />
-          </div>
-          {!isNewTabPage && !isHtmlFullscreen && activeTab?.error && (
-            <BrowserErrorView
-              error={activeTab.error}
-              onRetry={handleReload}
-              onGoBack={handleGoBack}
-            />
-          )}
-        </div>
-
-        {/* Aside Right Panel (Translate, Notes, Downloads) */}
-        <AsidePanel
-          isOpen={isAsideOpen}
-          activeTab={activeTab}
-          downloads={downloads}
-          externalTranslateText={externalTranslateText}
-          onClearExternalTranslateText={() => setExternalTranslateText(null)}
-          onClose={() => {
-            setIsAsideOpen(false);
-            setExternalTranslateText(null);
-          }}
-          onTranslatePage={handleTranslatePage}
-          isPageTranslated={isPageTranslated}
-          pageTranslationStatus={pageTranslationStatus}
-          isIncognito={isIncognito}
-          onOpenDownload={(id) => window.electronAPI?.openDownload(id)}
-          onShowDownloadInFinder={(id) => window.electronAPI?.showInFinder(id)}
-          onCancelDownload={(id) => window.electronAPI?.cancelDownload(id)}
-        />
-      </div>
-
-      {/* 5. Command Palette (⌘K) */}
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        activeTab={activeTab}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onNewTab={handleNewTab}
-        onReopenClosedTab={handleReopenClosedTab}
-        onToggleDevTools={handleToggleDevTools}
-        onToggleTranslate={handleTranslatePage}
-        onToggleAside={() => setIsAsideOpen((prev) => !prev)}
-        onOpenFind={handleOpenFind}
-        onReloadWithoutCache={handleReloadWithoutCache}
-        onCopyUrl={handleCopyUrl}
-        onCopyOrigin={handleCopyOrigin}
-        onResetZoom={handleResetZoom}
-        onOpenSettings={() => {
-          setSettingsTab('general');
-          setIsSettingsOpen(true);
-        }}
-        onOpenLibrary={() => setIsLibraryOpen(true)}
-        onGoHome={handleGoHome}
-        onReload={handleReload}
-        onOpenFile={handleOpenFile}
-        onPrint={handlePrintPage}
-        onSavePdf={handleSavePageAsPdf}
-        onViewSource={handleViewSource}
-        onCopyTitle={handleCopyTitle}
-        onCopyTitleUrl={handleCopyTitleUrl}
-        onClearHistory={() => {
-          window.electronAPI?.clearHistory();
-          setHistory([]);
-        }}
-      />
-
-      {pageSource !== null && (
-        <div className="aero-overlay fixed inset-0 z-[75] flex items-start justify-center overflow-y-auto px-4 pb-6 pt-16" onClick={() => setPageSource(null)}>
-          <section className="aero-modal flex max-h-[calc(100dvh-5rem)] min-h-[20rem] w-full max-w-5xl flex-col overflow-hidden" role="dialog" aria-modal="true" aria-label="페이지 소스" onClick={(event) => event.stopPropagation()}>
-            <header className="aero-panel-header flex shrink-0 items-center gap-3 border-b px-4 py-3">
-              <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">페이지 소스</h2><p className="mt-0.5 text-[11px] text-[var(--text-muted)]">현재 HTTP/HTTPS 문서의 DOM 소스입니다. 최대 2MB까지 표시합니다.</p></div>
-              <button type="button" onClick={() => handleCopyText(pageSource)} className="aero-quiet-button gap-1 px-2 py-1 text-[11px]"><span>복사</span></button>
-              <button type="button" onClick={() => setPageSource(null)} className="aero-icon-button !h-7 !w-7" aria-label="페이지 소스 닫기"><span aria-hidden="true">×</span></button>
-            </header>
-            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words bg-[var(--chrome-bg)] p-4 text-[11px] leading-5 text-[var(--text-secondary)]">{pageSource}</pre>
-          </section>
-        </div>
-      )}
-
-      {/* 6. First Run Experience Modal */}
-      <FirstRunModal
-        isOpen={shouldShowFirstRun}
+      {/* Built-in settings page; native views are hidden for this internal URL. */}
+      {!isIncognito && <SettingsPage
+        isOpen={isSettingsPage && !isHtmlFullscreen}
+        initialTab={settingsSectionFromUrl(activeTab?.url)}
+        initialSiteOrigin={settingsSiteOrigin}
+        onSectionChange={(section) => handleNavigate(settingsUrl(section))}
         settings={settings}
-        onComplete={(updates) => {
-          void handleUpdateSettings(updates);
-        }}
-      />
-
-      {/* 7. Settings Modal (⌘,) */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        initialTab={settingsTab}
-        settings={settings}
-        blockedCount={blockedCount}
         onClose={handleCloseSettings}
         onUpdateSettings={handleUpdateSettings}
         onPermissionsChanged={refreshActiveSitePermissions}
@@ -1991,6 +1706,87 @@ export const App: React.FC = () => {
         }}
         onBookmarksChanged={() => {
           window.electronAPI?.getBookmarks().then(setBookmarks).catch((error) => console.error('Failed to refresh bookmarks:', error));
+        }}
+      />}
+
+
+          {isNewTabPage && !isHtmlFullscreen && (
+            <NewTabPage
+              settings={settings}
+              isIncognito={isIncognito}
+              onNavigate={handleNavigate}
+              onSearchExecuted={handleSearchExecuted}
+            />
+          )}
+
+          <div className={`w-full h-full ${isNewTabPage && !isHtmlFullscreen ? 'hidden' : 'block'}`}>
+            <WebViewContainer
+              ref={webviewContainerRef}
+              tabs={workspaceTabs}
+              activeTabId={activeTabId}
+              layoutKey={`${isSiteInfoOpen}:${isAsideOpen}:${isFindOpen}:${settings.showBookmarkBar}:${isHtmlFullscreen}:${settings.interfaceStyle}`}
+              onUpdateTab={handleUpdateTab}
+              onNewTab={handleNewTab}
+              onSelectTab={handleSelectTab}
+              onFoundInPage={handleFoundInPage}
+            />
+          </div>
+          {!isNewTabPage && !isHtmlFullscreen && activeTab?.error && (
+            <BrowserErrorView
+              error={activeTab.error}
+              onRetry={handleReload}
+              onGoBack={handleGoBack}
+            />
+          )}
+        </div>
+
+        {isSiteInfoOpen && !isHtmlFullscreen && getSiteOrigin(activeTab?.url) && activeTab && (
+          <SiteInfoPanel key={getSiteOrigin(activeTab.url)} url={activeTab.url} permissions={sitePermissions}
+            muted={activeTab.isMuted} zoom={zoomLevel} onClose={() => setIsSiteInfoOpen(false)}
+            onOpenSettings={isIncognito ? undefined : () => { setSettingsSiteOrigin(getSiteOrigin(activeTab.url)); handleOpenSettings('sites'); }}
+            onPermissionChange={handleSitePermissionChange}
+            onResetPermissions={async () => {
+              const origin = getSiteOrigin(activeTab.url);
+              if (!origin || !window.electronAPI) return false;
+              const ok = await window.electronAPI.resetSitePermissions(origin);
+              if (ok) refreshActiveSitePermissions();
+              return ok;
+            }}
+            onToggleMute={() => handleToggleMuteTab(activeTab.id)} onZoomIn={() => handleChangeZoom(0.1)}
+            onZoomOut={() => handleChangeZoom(-0.1)} onResetZoom={handleResetZoom} />
+        )}
+        {/* Utility panel (Notes, Downloads) */}
+        <AsidePanel
+          isOpen={isAsideOpen}
+          activeTab={activeTab}
+          downloads={downloads}
+          onClose={() => setIsAsideOpen(false)}
+          isIncognito={isIncognito}
+          onOpenDownload={(id) => window.electronAPI?.openDownload(id)}
+          onShowDownloadInFinder={(id) => window.electronAPI?.showInFinder(id)}
+          onCancelDownload={(id) => window.electronAPI?.cancelDownload(id)}
+        />
+      </div>
+
+      {pageSource !== null && (
+        <div className="null-overlay fixed inset-0 z-[75] flex items-start justify-center overflow-y-auto px-4 pb-6 pt-16" onClick={() => setPageSource(null)}>
+          <section className="null-modal flex max-h-[calc(100dvh-5rem)] min-h-[20rem] w-full max-w-5xl flex-col overflow-hidden" role="dialog" aria-modal="true" aria-label="페이지 소스" onClick={(event) => event.stopPropagation()}>
+            <header className="null-panel-header flex shrink-0 items-center gap-3 border-b px-4 py-3">
+              <div className="min-w-0 flex-1"><h2 className="text-sm font-semibold">페이지 소스</h2><p className="mt-0.5 text-[11px] text-[var(--text-muted)]">현재 HTTP/HTTPS 문서의 DOM 소스입니다. 최대 2MB까지 표시합니다.</p></div>
+              <button type="button" onClick={() => handleCopyText(pageSource)} className="null-quiet-button gap-1 px-2 py-1 text-[11px]"><span>복사</span></button>
+              <button type="button" onClick={() => setPageSource(null)} className="null-icon-button !h-7 !w-7" aria-label="페이지 소스 닫기"><span aria-hidden="true">×</span></button>
+            </header>
+            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words bg-[var(--chrome-bg)] p-4 text-[11px] leading-5 text-[var(--text-secondary)]">{pageSource}</pre>
+          </section>
+        </div>
+      )}
+
+      {/* 6. First Run Experience Modal */}
+      <FirstRunModal
+        isOpen={shouldShowFirstRun}
+        settings={settings}
+        onComplete={(updates) => {
+          void handleUpdateSettings(updates);
         }}
       />
 

@@ -76,17 +76,17 @@ export class DownloadManager {
     }
   }
 
-  public getDownloads(targetSession?: Electron.Session): DownloadItemInfo[] {
+  public getDownloads(targetSession?: Electron.Session, persistentOnly = false): DownloadItemInfo[] {
     return Array.from(this.downloads.values())
-      .filter((d) => !targetSession || d.session === targetSession)
+      .filter((d) => (!targetSession || d.session === targetSession) && (!persistentOnly || d.session.isPersistent()))
       .map((d) => ({ ...d.info }));
   }
 
-  public clearHistory(targetSession?: Electron.Session, cutoff = 0) {
+  public clearHistory(targetSession?: Electron.Session, cutoff = 0, persistentOnly = false) {
     for (const [id, entry] of this.downloads) {
       // Never remove an active download from the manager: its progress and
       // cancellation handle must remain reachable until it finishes.
-      if (entry.info.state !== 'progressing' && (!targetSession || entry.session === targetSession) && (!cutoff || entry.info.startTime >= cutoff)) {
+      if (entry.info.state !== 'progressing' && (!targetSession || entry.session === targetSession) && (!persistentOnly || entry.session.isPersistent()) && (!cutoff || entry.info.startTime >= cutoff)) {
         this.downloads.delete(id);
       }
     }
@@ -97,6 +97,10 @@ export class DownloadManager {
     if (entry && (!targetSession || entry.session === targetSession) && entry.info.state === 'progressing') {
       entry.item.cancel();
     }
+  }
+
+  public getDownloadSession(id: string): Electron.Session | undefined {
+    return this.downloads.get(id)?.session;
   }
 
   public openDownload(id: string, targetSession?: Electron.Session) {

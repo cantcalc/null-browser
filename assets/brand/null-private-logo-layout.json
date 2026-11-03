@@ -1,0 +1,24 @@
+{
+  "sourceFile": "assets/brand/null-private-logo-source.png",
+  "sourceSha256": "5288dfd45e45de58628864e939c7fdb41c2b6028c7d64da84686d3861d632240",
+  "sourceBounds": {
+    "left": 210,
+    "top": 200,
+    "width": 824,
+    "height": 830
+  },
+  "outputBounds": {
+    "left": 3,
+    "top": 0,
+    "width": 1017,
+    "height": 1024
+  },
+  "margins": {
+    "left": 3,
+    "right": 4,
+    "top": 0,
+    "bottom": 0
+  },
+  "transparentOutsideTile": true,
+  "usage": "Private New Tab home logo only; normal logo and application icons are unchanged."
+}

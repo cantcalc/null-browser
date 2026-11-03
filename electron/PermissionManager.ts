@@ -17,6 +17,7 @@ export class PermissionManager {
   private dataManager: DataManager;
   private sessionDecisions = new WeakMap<Electron.Session, Map<string, 'allow' | 'deny'>>();
   private pending = new Map<string, PendingPermission>();
+  private destructionListeners = new Map<Electron.WebContents, () => void>();
 
   constructor(dataManager: DataManager) {
     this.dataManager = dataManager;
@@ -58,8 +59,13 @@ export class PermissionManager {
         permission,
         timer,
       });
-      webContents.once('destroyed', () => this.cancelForWebContents(webContents));
-      onPrompt({ requestId, origin, permission, requestingUrl: url });
+      if (!this.destructionListeners.has(webContents)) {
+        const listener = () => this.cancelForWebContents(webContents);
+        this.destructionListeners.set(webContents, listener);
+        webContents.once('destroyed', listener);
+      }
+      try { onPrompt({ requestId, origin, permission, requestingUrl: url }); }
+      catch { this.resolveRequest(requestId, 'deny', webContents); }
     } catch {
       callback(false);
     }
@@ -92,6 +98,7 @@ export class PermissionManager {
     if (!pending || (sender && pending.webContents !== sender)) return false;
     this.pending.delete(requestId);
     clearTimeout(pending.timer);
+    this.releaseDestructionListener(pending.webContents);
 
     if (decision !== 'once' && pending.session.isPersistent()) {
       this.setDecision(pending.origin, pending.permission, decision);
@@ -112,6 +119,15 @@ export class PermissionManager {
       clearTimeout(pending.timer);
       pending.callback(false);
     }
+    this.releaseDestructionListener(webContents);
+  }
+
+  private releaseDestructionListener(contents: Electron.WebContents) {
+    if (Array.from(this.pending.values()).some(request => request.webContents === contents)) return;
+    const listener = this.destructionListeners.get(contents);
+    if (!listener) return;
+    contents.off('destroyed', listener);
+    this.destructionListeners.delete(contents);
   }
 
   public setSessionDecision(session: Electron.Session, origin: string, permission: string, decision: 'allow' | 'deny') {

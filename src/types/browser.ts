@@ -87,12 +87,6 @@ export interface PageError {
 
 export type SearchEngine = 'google' | 'naver' | 'duckduckgo' | 'bing' | 'brave' | 'custom';
 
-export interface SearchShortcut {
-  keyword: string;
-  name: string;
-  searchUrl: string;
-}
-
 export interface FavoriteItem {
   id: string;
   title: string;
@@ -110,29 +104,21 @@ export interface ClearDataOptions {
 }
 
 export interface BrowserSettings {
+  interfaceStyle: import('../../shared/appearance').InterfaceStyle;
+  homeStyle: import('../../shared/appearance').HomeStyle;
   firstRunCompleted: boolean;
-  theme: 'noir' | 'paper' | 'graphite' | 'midnight' | 'forest' | 'aurora' | 'sunset' | 'oled' | 'light' | 'cobalt' | 'clay' | 'mist';
-  accentColor: string;
+  theme: import('../../shared/appearance').BrowserTheme;
   searchEngine: SearchEngine;
   customSearchUrl: string;
-  searchShortcuts: SearchShortcut[];
   saveBrowsingHistory: boolean;
   saveSearchHistory: boolean;
   showBookmarkBar: boolean;
   startupBehavior: 'newtab' | 'restore' | 'specific';
   startupPages: string[];
-  newTabConfig: {
-    showFavorites: boolean;
-    showRecentSites: boolean;
-    showLogo: boolean;
-    compactMode: boolean;
-  };
   favorites: FavoriteItem[];
   downloadPath: string;
   askDownloadLocation: boolean;
   siteZoom: Record<string, number>;
-  siteTranslation: Record<string, 'always' | 'never' | 'ask'>;
-  adBlockEnabled: boolean;
   cookiePolicy: 'allow' | 'block-third-party';
   cookieExceptions: Record<string, 'allow' | 'block'>;
   preferredLanguages: string[];

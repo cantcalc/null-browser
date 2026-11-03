@@ -1,0 +1,9 @@
+{
+  "package": "lazy-val",
+  "version": "1.0.5",
+  "declaredLicense": "MIT",
+  "declaredAuthor": "Vladimir Krivosheev",
+  "source": "https://registry.npmjs.org/lazy-val/1.0.5",
+  "noticeTemplate": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt",
+  "note": "npm tarball contains no license file; repository license endpoint unavailable. Canonical MIT terms with author metadata; no copyright year invented."
+}

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, Menu } = require('electron');
 const { spawn } = require('child_process');
 const { buildSync } = require('esbuild');
 const fs = require('fs');
@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 
 const projectRoot = path.join(__dirname, '..');
-const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aero-full-runtime-'));
+const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'null-full-runtime-'));
 const userDataDir = path.join(runtimeDir, 'profile');
 const downloadDir = path.join(runtimeDir, 'downloads');
 fs.mkdirSync(userDataDir, { recursive: true });
@@ -45,12 +45,12 @@ async function createFixtureServer() {
     const url = new URL(request.url || '/', 'http://127.0.0.1');
     if (url.pathname === '/download') {
       const body = Buffer.alloc(128 * 1024, 0x61);
-      response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="aero-qa.bin"', 'content-length': String(body.length) });
+      response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="null-qa.bin"', 'content-length': String(body.length) });
       response.end(body); return;
     }
     if (url.pathname === '/slow-download') {
       const total = 8 * 1024 * 1024; let sent = 0;
-      response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="aero-cancel.bin"', 'content-length': String(total) });
+      response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="null-cancel.bin"', 'content-length': String(total) });
       const timer = setInterval(() => {
         if (response.destroyed || sent >= total) { clearInterval(timer); timers.delete(timer); if (!response.destroyed) response.end(); return; }
         const chunk = Buffer.alloc(Math.min(64 * 1024, total - sent), 0x62); sent += chunk.length; response.write(chunk);
@@ -58,17 +58,16 @@ async function createFixtureServer() {
       timers.add(timer); response.on('close', () => { clearInterval(timer); timers.delete(timer); }); return;
     }
     if (url.pathname === '/interrupted-download') {
-      response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="aero-interrupted.bin"', 'content-length': String(1024 * 1024) });
+      response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="null-interrupted.bin"', 'content-length': String(1024 * 1024) });
       response.write(Buffer.alloc(16 * 1024, 0x63)); setTimeout(() => response.destroy(), 20); return;
     }
     const pages = {
       '/one': ['One', '<h1>Alpha navigation page</h1><a id="next" href="/two">Next</a>'],
       '/two': ['Two', '<h1>Beta navigation page</h1><a href="/one">Previous</a>'],
-      '/translate': ['Translate', '<h1>Hello world</h1><p>This is a translation test.</p>'],
       '/popup': ['Popup', '<a id="popup" target="_blank" href="/two">Open tab</a>'],
     };
-    const [title, body] = pages[url.pathname] || ['Fixture', '<h1>Aero runtime fixture</h1>'];
-    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'set-cookie': 'aero_fixture=1; Path=/; SameSite=Lax' });
+    const [title, body] = pages[url.pathname] || ['Fixture', '<h1>NULL runtime fixture</h1>'];
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'set-cookie': 'null_fixture=1; Path=/; SameSite=Lax' });
     response.end(`<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`);
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -78,12 +77,18 @@ async function createFixtureServer() {
 
 function testData() {
   const manager = new DataManager();
+  const retired = ['adBlockEnabled', 'siteTranslation', 'accentColor', 'newTabConfig'];
+  manager.updateSettings({ adBlockEnabled: true, siteTranslation: { 'https://example.com': 'always' } });
+  assert(retired.every(key => !(key in manager.getSettings())), 'retired settings survived update');
+  const legacyImport = { settings: { ...manager.getSettings(), adBlockEnabled: true, siteTranslation: { 'https://example.com': 'always' } } };
+  assert(manager.importSettingsJson(JSON.stringify(legacyImport)), 'legacy settings import failed');
+  assert(retired.every(key => !(key in JSON.parse(manager.exportSettingsJson()).settings)), 'retired settings survived import/export');
   assert(manager.getWorkspaces().workspaces[0].name === 'work', 'default workspace is not work');
   manager.updateSettings({ firstRunCompleted: true, theme: 'graphite' });
   manager.saveWorkspaces([{ id: 'workspace-default', name: 'work', color: '#3b82f6' }, { id: 'workspace-qa', name: 'QA', color: '#10b981' }], 'workspace-qa');
   manager.saveWorkspaces([{ id: 'workspace-default', name: 'work', color: '#3b82f6' }, { id: 'workspace-qa', name: 'QA Renamed', color: '#10b981' }], 'workspace-qa');
   manager.clearHistory(); manager.clearSearchHistory();
-  manager.addHistory('https://example.com/qa', 'QA history'); manager.addSearchHistory('aero qa search', 'google');
+  manager.addHistory('https://example.com/qa', 'QA history'); manager.addSearchHistory('null qa search', 'google');
   assert(manager.getHistory().length === 1 && manager.getSearchHistory().length === 1, 'history add failed');
   manager.updateSettings({ saveBrowsingHistory: false, saveSearchHistory: false });
   manager.addHistory('https://example.com/blocked', 'Blocked'); manager.addSearchHistory('blocked search', 'google');
@@ -105,7 +110,8 @@ function testData() {
   manager.removeDownloadHistory('download-history-qa'); assert(fs.existsSync(retained), 'download history removal deleted file');
   manager.flushSync();
   const restored = new DataManager();
-  assert(restored.getSettings().theme === 'graphite', 'settings restart failed'); assert(restored.getWorkspaces().activeWorkspaceId === 'workspace-qa', 'workspace restart failed');
+  assert(retired.every(key => !(key in restored.getSettings())), 'retired settings returned on restart');
+  assert(restored.getSettings().theme === 'noir', 'legacy dark theme migration/restart failed'); assert(restored.getWorkspaces().activeWorkspaceId === 'workspace-qa', 'workspace restart failed');
   assert(restored.getWorkspaces().workspaces.some((item) => item.name === 'QA Renamed'), 'workspace rename restart failed');
   assert(restored.getHistory().length === 1 && restored.getSearchHistory().length === 1, 'history restart failed'); assert(restored.getNotes() === 'QA persistent note', 'notes restart failed');
   assert(restored.getSession().activeTabId === 'tab-qa-1', 'session restart failed'); assert(restored.getSiteZoom('https://example.com/anything') === 1.4, 'site zoom restart failed');
@@ -113,15 +119,15 @@ function testData() {
   restored.saveWorkspaces([{ id: 'workspace-default', name: 'work', color: '#3b82f6' }], 'workspace-default'); restored.clearHistory(); restored.clearSearchHistory(); restored.flushSync();
   const afterDelete = new DataManager(); assert(afterDelete.getWorkspaces().workspaces.length === 1 && afterDelete.getHistory().length === 0, 'delete/restart failed');
   afterDelete.markRunStarted(); const crashed = new DataManager(); assert(crashed.didPreviousRunCrash(), 'crash marker failed'); crashed.markCleanExit();
-  results.data = { workspaceCrudRestart: true, historyTogglesDeleteRestart: true, bookmarksCrudReorderImportExport: true, favoritesCrud: true, notesClosedTabs: true, sessionZoomPermissionRestart: true, crashMarker: true, removeDownloadKeepsFile: true };
+  results.data = { legacyFeatureSettingsRemoved: true, workspaceCrudRestart: true, historyTogglesDeleteRestart: true, bookmarksCrudReorderImportExport: true, favoritesCrud: true, notesClosedTabs: true, sessionZoomPermissionRestart: true, crashMarker: true, removeDownloadKeepsFile: true };
   return crashed;
 }
 
 async function testPermissions(dataManager, origin) {
   const manager = new PermissionManager(dataManager);
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const normalSession = session.fromPartition(`persist:aero-permission-${suffix}`);
-  const privateSession = session.fromPartition(`aero-permission-private-${suffix}`);
+  const normalSession = session.fromPartition(`persist:null-permission-${suffix}`);
+  const privateSession = session.fromPartition(`null-permission-private-${suffix}`);
   const normalWindow = new BrowserWindow({ show: false, webPreferences: { session: normalSession, sandbox: true } });
   const privateWindow = new BrowserWindow({ show: false, webPreferences: { session: privateSession, sandbox: true } });
   try {
@@ -153,7 +159,7 @@ function entry(manager, id) { return manager.tabs.get(id); }
 function memoryKiB() { return app.getAppMetrics().reduce((sum, item) => sum + (item.memory?.workingSetSize || 0), 0); }
 
 async function testTabs(origin) {
-  const ses = session.fromPartition(`aero-tabs-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const ses = session.fromPartition(`null-tabs-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const window = new BrowserWindow({ show: false, width: 1000, height: 700, webPreferences: { sandbox: true, session: ses } });
   const events = [];
   const originalSend = window.webContents.send.bind(window.webContents);
@@ -164,6 +170,20 @@ async function testTabs(origin) {
     manager.createTab('one', `${origin}/one`); manager.createTab('two', `${origin}/two`); manager.switchTab('one');
     await waitFor(() => !entry(manager, 'one').isLoading && !entry(manager, 'two').isLoading, 'fixture tabs load');
     assert(entry(manager, 'one').title === 'One', 'tab title did not update');
+    const guest = entry(manager, 'one').view.webContents;
+    let prevented = false;
+    for (const input of [{ key: 'k', alt: false }, { key: 't', alt: true }]) {
+      guest.emit('before-input-event', { preventDefault: () => { prevented = true; } }, { type: 'keyDown', meta: true, control: false, shift: false, ...input });
+    }
+    assert(!prevented && !events.some(event => /translate|command-palette/.test(event.channel) || /translate|command-palette/.test(String(event.args[0]))), 'retired shortcut still handled');
+    let contextItems;
+    const buildMenu = Menu.buildFromTemplate;
+    try {
+      Menu.buildFromTemplate = items => { contextItems = items; return { popup() {} }; };
+      guest.emit('context-menu', {}, { x: 5, y: 5, selectionText: 'Hello world', linkURL: `${origin}/two` });
+    } finally { Menu.buildFromTemplate = buildMenu; }
+    assert(contextItems.some(item => item.label === '새 탭에서 링크 열기') && contextItems.some(item => item.label === '검사 (Inspect Element)'), 'basic context menu lost');
+    assert(contextItems.every(item => !/번역|translate/i.test(item.label || '')), 'translation context menu remains');
     manager.navigateTab('one', `${origin}/two`); await waitFor(() => !entry(manager, 'one').isLoading && entry(manager, 'one').url.endsWith('/two'), 'navigate');
     manager.goBack('one'); await waitFor(() => entry(manager, 'one').url.endsWith('/one'), 'back');
     manager.goForward('one'); await waitFor(() => entry(manager, 'one').url.endsWith('/two'), 'forward');
@@ -182,27 +202,21 @@ async function testTabs(origin) {
     manager.setOverlay(true); assert(!entry(manager, 'one').view.getVisible() && !entry(manager, 'two').view.getVisible(), 'overlay did not hide views');
     manager.setOverlay(false); assert(entry(manager, 'one').view.getVisible() && entry(manager, 'two').view.getVisible(), 'views did not return');
     manager.switchTab('two'); manager.setSplitView(true, 'one', 0.5); assert(entry(manager, 'one').view.getVisible() && entry(manager, 'two').view.getVisible(), 'pane swap failed');
-    manager.createTab('translate', `${origin}/translate`); manager.switchTab('translate'); await waitFor(() => !entry(manager, 'translate').isLoading, 'translation page');
-    assert(await manager.translatePage('translate', async (texts) => texts.map((text) => `번역:${text}`)), 'translation apply failed');
-    const translated = await entry(manager, 'translate').view.webContents.executeJavaScript('document.body.innerText'); assert(translated.includes('번역:Hello world'), 'translation text missing');
-    assert((await manager.translatePage('translate', async (texts) => texts)) === false, 'translation restore state wrong');
-    const original = await entry(manager, 'translate').view.webContents.executeJavaScript('document.body.innerText'); assert(original.includes('Hello world') && !original.includes('번역:Hello world'), 'original text not restored');
-    assert((await manager.translatePage('translate', async () => { throw new Error('offline'); })) === false, 'translation failure reported success');
-    const safeAfterFailure = await entry(manager, 'translate').view.webContents.executeJavaScript('document.body.innerText'); assert(safeAfterFailure.includes('Hello world'), 'translation failure damaged page');
+    assert(typeof manager.translatePage === 'undefined', 'removed translation engine is still reachable');
     manager.createTab('popup', `${origin}/popup`); manager.switchTab('popup'); await waitFor(() => !entry(manager, 'popup').isLoading, 'popup page');
     await entry(manager, 'popup').view.webContents.executeJavaScript("document.getElementById('popup').click()", true); await waitFor(() => events.some((e) => e.channel === 'tab:open-external' && String(e.args[0]).endsWith('/two')), 'target blank managed event');
-    manager.navigateTab('popup', 'javascript:alert(1)'); assert(entry(manager, 'popup').url === 'aero://newtab', 'unsafe URL was not rejected');
+    manager.navigateTab('popup', 'javascript:alert(1)'); assert(entry(manager, 'popup').url === 'null://newtab', 'unsafe URL was not rejected');
     const closingContents = entry(manager, 'two').view.webContents; const childrenBefore = window.contentView.children.length; manager.closeTab('two'); await waitFor(() => closingContents.isDestroyed(), 'closed WebContents');
     assert(window.contentView.children.length === childrenBefore - 1, 'closed view stayed attached');
     const before20 = memoryKiB(); for (let i = 0; i < 20; i++) manager.createTab(`memory-${i}`, `${origin}/one?tab=${i}`);
     await waitFor(() => Array.from(manager.tabs.entries()).filter(([id]) => id.startsWith('memory-')).every(([, item]) => !item.isLoading), '20 pages', 20000);
     const with20 = memoryKiB(); for (let i = 1; i < 20; i++) manager.closeTab(`memory-${i}`); await delay(500); const afterClose19 = memoryKiB();
     manager.setSplitView(false);
-    manager.createTab('virtual-secondary', 'aero://newtab');
+    manager.createTab('virtual-secondary', 'null://newtab');
     manager.switchTab('one');
     manager.setSplitView(true, 'virtual-secondary', 0.5);
     assert(entry(manager, 'one').view.getBounds().width === 980, 'virtual tab created a false split gap');
-    results.tabs = { navigationBackForwardReload: true, titleStatus: true, splitBounds, splitNavigationBounds: true, virtualSplitGuard: true, overlayVisibility: true, paneSwap: true, translationApplyRestoreFailure: true, targetBlankManaged: true, unsafeProtocolBlocked: true, closedViewDestroyed: true };
+    results.tabs = { navigationBackForwardReload: true, titleStatus: true, splitBounds, splitNavigationBounds: true, virtualSplitGuard: true, overlayVisibility: true, paneSwap: true, translationEngineRemoved: true, removedShortcutsAndContextMenu: true, targetBlankManaged: true, unsafeProtocolBlocked: true, closedViewDestroyed: true };
     results.memory = { unit: 'KiB', before20, with20, afterClose19 };
   } finally { manager.destroyAll(); window.destroy(); }
 }
@@ -252,7 +266,7 @@ async function testExternalSites() {
     const started = Date.now();
     const child = spawn(process.execPath, [path.join(__dirname, 'verify-external-site-isolated.js')], {
       cwd: projectRoot,
-      env: { ...process.env, AERO_EXTERNAL_NAME: name, AERO_EXTERNAL_URL: url },
+      env: { ...process.env, NULL_EXTERNAL_NAME: name, NULL_EXTERNAL_URL: url },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -289,12 +303,12 @@ app.whenReady().then(async () => {
     await testPermissions(dataManager, fixture.origin); console.log('[runtime] Permissions passed');
     await testTabs(fixture.origin); console.log('[runtime] Tabs passed');
     await testDownloads(fixture.origin); console.log('[runtime] Downloads passed');
-    if (process.env.AERO_RUN_EXTERNAL === 'true') {
+    if (process.env.NULL_RUN_EXTERNAL === 'true') {
       await testExternalSites(); console.log('[runtime] External sites finished');
     } else {
-      console.log('[runtime] External sites skipped (set AERO_RUN_EXTERNAL=true for isolated network probe)');
+      console.log('[runtime] External sites skipped (set NULL_RUN_EXTERNAL=true for isolated network probe)');
     }
-    console.log('AERO_FULL_RUNTIME_QA_RESULT=' + JSON.stringify({ ok: true, electron: process.versions.electron, chromium: process.versions.chrome, userAgent: app.userAgentFallback, results }, null, 2));
+    console.log('NULL_FULL_RUNTIME_QA_RESULT=' + JSON.stringify({ ok: true, electron: process.versions.electron, chromium: process.versions.chrome, userAgent: app.userAgentFallback, results }, null, 2));
   } catch (error) { console.error(error); process.exitCode = 1; }
   finally { await fixture.close().catch(() => {}); clearInterval(keepAlive); fs.rmSync(runtimeDir, { recursive: true, force: true }); app.exit(process.exitCode || 0); }
 }).catch((error) => { clearInterval(keepAlive); console.error(error); fs.rmSync(runtimeDir, { recursive: true, force: true }); app.exit(1); });

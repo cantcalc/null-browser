@@ -1,0 +1,250 @@
+/* Five skins, one DOM tree. No blur layers, timers or extra native views. */
+:root[data-interface-style] {
+  --control-radius: 8px;
+  --tab-radius: 8px;
+  --field-radius: 10px;
+  --panel-radius: 14px;
+  --motion-fast: 90ms;
+  --motion-normal: 120ms;
+  --chrome-connected: var(--chrome-toolbar);
+}
+
+[data-interface-style] .null-connected-chrome::before { display: none; }
+[data-interface-style] .null-connected-chrome::after { background: var(--border-subtle); }
+[data-interface-style] .null-workspacebar { height: 32px; min-height: 32px; opacity: 1; }
+[data-interface-style] .null-workspacebar > div:not([aria-hidden]) { gap: 6px; }
+[data-interface-style] .null-workspacebar select { font-weight: 500; }
+[data-interface-style] .null-icon-button { border-radius: var(--control-radius); }
+[data-interface-style] .null-tab { animation: none; border: 1px solid transparent; border-radius: var(--tab-radius); box-shadow: none; margin-bottom: 0; }
+[data-interface-style] .null-tab[data-active="true"] { color: var(--text-primary); background: var(--chrome-surface-active); }
+[data-interface-style] .null-tab:hover:not([data-active="true"]) { background: var(--chrome-surface-hover); }
+[data-interface-style] .null-tab-regular > span { font-weight: 450; }
+[data-interface-style] .null-tab-strip { max-width: calc(100% - 100px); }
+[data-interface-style] .null-toolbar { gap: 10px; border: 0; }
+[data-interface-style] .null-omnibox { border: 1px solid var(--border-subtle); background: var(--chrome-bg); border-radius: var(--field-radius); }
+[data-interface-style] .null-omnibox:hover { border-color: var(--border-active); background: var(--chrome-bg); }
+[data-interface-style] .null-omnibox:focus-within { border-color: var(--accent-border); background: var(--chrome-bg); }
+[data-interface-style] .null-popover, [data-interface-style] .null-modal { border-radius: var(--panel-radius); }
+[data-interface-style] .null-aside, [data-interface-style] .null-site-inspector { background: var(--chrome-toolbar); }
+[data-interface-style] .null-newtab { background: var(--content-bg); }
+[data-interface-style] .new-tab-content { max-width: 600px; gap: 28px; padding-bottom: 32px; }
+[data-interface-style] .new-tab-content > * { margin-block: 0; }
+[data-interface-style] .null-newtab-logo { width: 88px; height: 88px; }
+[data-interface-style] .null-wordmark-title { font-size: 34px; font-weight: 450; letter-spacing: -.05em; }
+[data-interface-style] .null-newtab-search { height: 52px; min-height: 52px; border-radius: var(--field-radius); background: var(--chrome-toolbar); border-color: var(--border-active); }
+[data-interface-style] .null-newtab-search-input { font-size: 15px; }
+[data-interface-style] .null-favorite-tile, [data-interface-style] .null-favorite-add { min-height: 88px; border: 1px solid transparent; border-radius: var(--field-radius); background: transparent; box-shadow: none; }
+[data-interface-style] .null-favorite-tile:hover, [data-interface-style] .null-favorite-add:hover { background: var(--chrome-surface-hover); }
+[data-interface-style] .null-recent-row { border: 0; border-radius: var(--control-radius); background: transparent; }
+[data-interface-style] .null-recent-row:hover { background: var(--chrome-surface-hover); }
+[data-interface-style] .null-settings-section > div { padding: 20px 0; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; }
+[data-interface-style] .null-settings-section > div:first-child { padding-top: 0; }
+[data-interface-style] .null-settings-section > div:last-child { border-bottom: 0; }
+[data-interface-style] .null-settings-section { gap: 14px; }
+[data-interface-style] .null-settings-page-header h1 { font-size: 23px; font-weight: 550; }
+[data-interface-style] .null-settings-navigation button { border-radius: var(--control-radius); }
+[data-interface-style] .null-settings-theme-grid > button { border-radius: var(--field-radius); }
+[data-interface-style] .null-primary-button, [data-interface-style] .null-quiet-button { border-radius: var(--control-radius); }
+
+/* Core: low chrome, compact tabs, quiet unboxed utility surfaces. */
+[data-interface-style="core"] .null-tabbar { height: 36px; min-height: 36px; padding-inline: 10px; }
+[data-interface-style="core"] .null-tab-strip { gap: 3px; }
+[data-interface-style="core"] .null-tab-regular { height: 28px; width: 164px; }
+[data-interface-style="core"] .null-tab[data-active="true"] { background: color-mix(in srgb, var(--chrome-surface-active) 72%, var(--chrome-toolbar)); }
+[data-interface-style="core"] .null-toolbar { height: 44px; min-height: 44px; padding: 4px 12px 8px; }
+[data-interface-style="core"] .null-omnibox { height: 32px; min-height: 32px; }
+[data-interface-style="core"] .null-settings-sidebar { background: var(--chrome-toolbar); }
+
+/* Air: a little more breathing room; floating rounded tabs and soft fields. */
+:root[data-interface-style="air"] { --control-radius: 10px; --tab-radius: 12px; --field-radius: 16px; --panel-radius: 18px; }
+[data-interface-style="air"] .null-tabbar { height: 44px; min-height: 44px; padding-inline: 12px; }
+[data-interface-style="air"] .null-tab-strip { gap: 6px; }
+[data-interface-style="air"] .null-tab-regular { height: 32px; width: 174px; padding-inline: 12px; }
+[data-interface-style="air"] .null-tab[data-active="true"] { background: var(--chrome-surface); border-color: var(--border-subtle); }
+[data-interface-style="air"] .null-toolbar { height: 50px; min-height: 50px; padding: 2px 14px 10px; }
+[data-interface-style="air"] .null-omnibox { height: 36px; min-height: 36px; border-color: transparent; background: var(--chrome-surface); }
+[data-interface-style="air"] .null-omnibox:hover { background: var(--chrome-surface-active); }
+[data-interface-style="air"] .null-newtab-search { height: 58px; min-height: 58px; border-color: var(--border-subtle); background: var(--chrome-surface); }
+[data-interface-style="air"] .new-tab-content { max-width: 640px; gap: 34px; }
+[data-interface-style="air"] .null-newtab-logo { width: 104px; height: 104px; }
+[data-interface-style="air"] .null-wordmark-title { font-size: 40px; }
+[data-interface-style="air"] .null-favorite-tile { background: color-mix(in srgb, var(--chrome-surface) 48%, transparent); }
+[data-interface-style="air"] .null-favorite-tile:hover { background: var(--chrome-surface-active); }
+[data-interface-style="air"] .null-settings-navigation button[aria-current="page"] { border-color: transparent; background: var(--chrome-surface); }
+[data-interface-style="air"] .null-settings-page-header { border-bottom-color: transparent; }
+[data-interface-style="air"] .null-aside, [data-interface-style="air"] .null-site-inspector { background: var(--chrome-bg); }
+
+/* Studio: preserve the tab shelf joined to the toolbar.
+   All colors still come ONLY from the user's NULL theme, never the website. */
+:root[data-interface-style="studio"] { --control-radius: 6px; --tab-radius: 10px; --field-radius: 8px; --panel-radius: 12px; }
+[data-interface-style="studio"] .null-tabbar { height: 42px; min-height: 42px; padding: 5px 12px 0; background: var(--chrome-bg); }
+[data-interface-style="studio"] .null-tab-strip { align-self: stretch; align-items: stretch; gap: 2px; padding-block: 0; }
+[data-interface-style="studio"] .null-tab-regular { height: auto; min-height: 34px; width: 194px; padding-inline: 13px; border-radius: 10px 10px 0 0; }
+[data-interface-style="studio"] .null-tab[data-active="true"] { background: var(--chrome-toolbar); border-color: var(--border-subtle); border-bottom-color: var(--chrome-toolbar); }
+[data-interface-style="studio"] .null-tab[data-active="true"]::after { content: ''; position: absolute; bottom: 0; left: 13px; right: 13px; height: 2px; border-radius: 2px; background: var(--accent); opacity: .75; }
+[data-interface-style="studio"] .null-toolbar { height: 46px; min-height: 46px; padding: 5px 14px 7px; }
+[data-interface-style="studio"] .null-omnibox { height: 34px; min-height: 34px; background: transparent; }
+[data-interface-style="studio"] .null-favorite-tile, [data-interface-style="studio"] .null-favorite-add { align-items: flex-start; padding-inline: 12px; border-left: 1px solid var(--border-subtle); border-radius: 0; }
+[data-interface-style="studio"] .null-favorite-tile > span { text-align: left; }
+[data-interface-style="studio"] .null-settings-navigation button[aria-current="page"] { background: transparent; border-color: transparent; border-left: 2px solid var(--accent); border-radius: 0; }
+[data-interface-style="studio"] .null-settings-sidebar { background: var(--chrome-bg); }
+
+/* Focus: no tab cards; one quiet underline identifies the current document. */
+:root[data-interface-style="focus"] { --control-radius: 6px; --tab-radius: 4px; --field-radius: 9px; --panel-radius: 12px; }
+[data-interface-style="focus"] .null-tabbar { height: 35px; min-height: 35px; padding: 0 12px; }
+[data-interface-style="focus"] .null-tab-strip { gap: 0; align-self: stretch; align-items: stretch; padding-block: 0; }
+[data-interface-style="focus"] .null-tab-regular { height: auto; width: 166px; border-radius: 0; }
+[data-interface-style="focus"] .null-tab[data-active="true"] { background: transparent; border-bottom: 2px solid var(--text-primary); }
+[data-interface-style="focus"] .null-tab:hover:not([data-active="true"]) { background: var(--chrome-surface-hover); }
+[data-interface-style="focus"] .null-toolbar { height: 43px; min-height: 43px; padding: 4px 12px 7px; }
+[data-interface-style="focus"] .null-omnibox { height: 32px; min-height: 32px; border-color: transparent; background: var(--chrome-bg); }
+[data-interface-style="focus"] .null-settings-sidebar { background: var(--chrome-bg); }
+[data-interface-style="focus"] .null-settings-navigation button[aria-current="page"] { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 5px; }
+
+/* Outline: independent, finely outlined tabs above an inset address field. */
+:root[data-interface-style="outline"] { --control-radius: 7px; --tab-radius: 7px; --field-radius: 11px; --panel-radius: 14px; }
+[data-interface-style="outline"] .null-workspacebar { height: 34px; min-height: 34px; }
+[data-interface-style="outline"] .null-tabbar { height: 44px; min-height: 44px; padding: 4px 14px; }
+[data-interface-style="outline"] .null-tab-strip { gap: 7px; }
+[data-interface-style="outline"] .null-tab-regular { width: 184px; height: 32px; padding-inline: 12px; }
+[data-interface-style="outline"] .null-tab[data-active="true"] { border-color: var(--border-active); background: var(--chrome-bg); }
+[data-interface-style="outline"] .null-toolbar { height: 50px; min-height: 50px; padding: 4px 14px 8px; }
+[data-interface-style="outline"] .null-omnibox { height: 36px; min-height: 36px; background: var(--chrome-bg); }
+[data-interface-style="outline"] .null-settings-navigation button[aria-current="page"] { border-color: var(--border-active); background: transparent; }
+
+/* Small, real CSS previews rather than three mounted application trees. */
+.null-style-picker-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; font-size: 13px; font-weight: 550; }
+.null-style-picker-heading small { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+.null-style-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.null-style-choice { min-width: 0; padding: 9px; border: 1px solid var(--border-subtle); border-radius: 12px; text-align: left; background: transparent; cursor: pointer; }
+.null-style-choice:hover { background: var(--chrome-surface-hover); }
+.null-style-choice[aria-pressed="true"] { border-color: var(--accent-border); background: var(--accent-subtle); }
+.null-style-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.null-style-label { display: flex; justify-content: space-between; align-items: center; margin: 10px 2px 4px; }
+.null-style-label strong { font-size: 13px; font-weight: 550; letter-spacing: -.02em; }
+.null-style-choice > small { display: block; margin-inline: 2px; color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
+.null-style-preview { display: flex; flex-direction: column; height: 108px; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--chrome-bg); }
+.null-style-preview > i { height: 9px; margin: 5px 6px 2px; width: 22px; border-bottom: 3px dotted var(--text-muted); }
+.preview-tabs { display: flex; gap: 3px; height: 16px; padding: 2px 5px; background: var(--chrome-toolbar); }
+.preview-tabs > b { width: 29%; height: 12px; border-radius: 3px; background: var(--chrome-surface); }
+.preview-tabs > b:first-child { background: var(--chrome-surface-active); }
+.preview-toolbar { display: block; height: 15px; padding: 3px 18px; background: var(--chrome-toolbar); }
+.preview-toolbar > b { display: block; height: 9px; border: 1px solid var(--border-subtle); border-radius: 3px; background: var(--chrome-bg); }
+.preview-page { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; align-content: center; flex: 1; padding: 8px 22%; }
+.preview-page > b { grid-column: 1/-1; justify-self: center; width: 13px; height: 9px; border-radius: 2px; background: var(--text-secondary); }
+.preview-page > i { grid-column: 1/-1; height: 9px; border: 1px solid var(--border-active); border-radius: 3px; }
+.preview-page > em { height: 7px; border-radius: 2px; background: var(--chrome-surface-active); }
+[data-style="air"] .preview-tabs { height: 19px; padding-block: 4px; gap: 4px; }
+[data-style="air"] .preview-tabs > b { border-radius: 5px; }
+[data-style="air"] .preview-toolbar > b { border-radius: 6px; }
+[data-style="air"] .preview-page > i { border-radius: 6px; background: var(--chrome-surface); }
+[data-style="studio"] .preview-tabs { background: var(--chrome-bg); padding-bottom: 0; }
+[data-style="studio"] .preview-tabs > b:first-child { height: 14px; border-radius: 4px 4px 0 0; background: var(--chrome-toolbar); border-top: 1px solid var(--border-active); }
+[data-style="focus"] .preview-tabs > b { background: transparent; border-radius: 0; }
+[data-style="focus"] .preview-tabs > b:first-child { border-bottom: 1px solid var(--text-primary); }
+[data-style="focus"] .preview-toolbar > b { border-color: transparent; }
+[data-style="outline"] .preview-tabs { gap: 4px; height: 20px; padding-block: 4px; }
+[data-style="outline"] .preview-tabs > b { background: transparent; }
+[data-style="outline"] .preview-tabs > b:first-child { border: 1px solid var(--border-active); border-radius: 3px; background: var(--chrome-bg); }
+@media (max-width: 900px) {
+  .null-style-picker { gap: 7px; }
+  .null-style-choice { padding: 7px; }
+  .null-style-preview { height: 90px; }
+  [data-interface-style] .null-settings-content { padding-inline: 20px; }
+}
+@media (max-height: 650px) {
+  [data-interface-style] .new-tab-content { gap: 20px; padding-bottom: 0; }
+  [data-interface-style] .null-newtab-logo { width: 70px; height: 70px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-interface-style] *, [data-interface-style] *::before, [data-interface-style] *::after { transition: none !important; animation: none !important; }
+}
+
+/* One calm start page in every skin. The logo and search form are centered
+   together inside the usable page viewport, not aligned to the tab shelf. */
+[data-interface-style] .null-newtab { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 0; overflow: auto; padding: 28px; background: var(--chrome-bg); }
+[data-interface-style] .new-tab-content { display: flex; flex-direction: column; align-items: center; gap: 30px; width: min(100%, 540px); max-width: 540px; margin: auto; padding: 0; }
+[data-interface-style] .null-newtab-logo { width: 112px; height: 112px; margin: 0; }
+[data-interface-style] .null-newtab-form { width: 100%; }
+[data-interface-style] .null-newtab-search { display: flex; align-items: center; gap: 12px; width: 100%; height: 54px; min-height: 54px; margin: 0; padding: 0 18px; border: 1px solid var(--border-active); border-radius: 15px; background: var(--chrome-toolbar); box-shadow: none; cursor: text; transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease; }
+[data-interface-style] .null-newtab-search:hover { border-color: var(--text-muted); background: var(--chrome-toolbar); }
+[data-interface-style] .null-newtab-search:focus-within { border-color: var(--text-secondary); background: var(--chrome-toolbar); box-shadow: 0 0 0 3px var(--accent-subtle); }
+[data-interface-style] .null-newtab-search-icon { flex: 0 0 19px; width: 19px; height: 19px; margin: 0; color: var(--text-muted); pointer-events: none; }
+[data-interface-style] .null-newtab-search-input { align-self: stretch; flex: 1; width: 100%; min-width: 0; height: auto; padding: 0; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-size: 15px; caret-color: var(--text-primary); user-select: text; }
+.null-private-button[data-private-window="true"] { background: var(--chrome-surface-active); color: var(--text-primary); }
+.null-private .null-workspacebar { box-shadow: inset 0 -1px 0 var(--border-subtle); }
+.null-settings-brand { justify-content: flex-start; }
+.null-about-brand { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 22px 0; text-align: center; }
+.null-settings-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.null-theme-choice { display: flex; flex-direction: column; min-width: 0; gap: 9px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: transparent; text-align: left; cursor: pointer; }
+.null-theme-choice:hover { background: var(--chrome-surface-hover); }
+.null-theme-choice[aria-pressed="true"] { border-color: var(--text-secondary); background: var(--accent-subtle); }
+.null-theme-choice .null-style-label { margin: 0; }
+.null-theme-choice strong { font-size: 13px; font-weight: 550; }
+.null-theme-choice > small { color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.null-style-picker { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.null-style-choice { grid-column: span 2; }
+.null-style-choice:nth-last-child(-n+2) { grid-column: span 3; }
+.preview-page { padding: 8px 22%; gap: 6px; }
+.preview-page > b { width: 13px; height: 12px; background: var(--text-secondary); clip-path: polygon(0 0, 28% 0, 50% 70%, 74% 0, 100% 0, 64% 100%, 37% 100%); }
+@media (max-height: 650px) {
+  [data-interface-style] .null-newtab-logo { width: 88px; height: 88px; }
+  [data-interface-style] .new-tab-content { gap: 24px; }
+}
+@media (max-width: 600px) {
+  [data-interface-style] .null-newtab { padding: 24px; }
+  .null-style-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .null-style-choice, .null-style-choice:nth-last-child(-n+2) { grid-column: span 1; }
+  .null-style-choice:last-child { grid-column: 1 / -1; }
+}
+
+/* Private windows have their own dark palette, including when the saved
+   normal-window theme is White. The page itself remains a native web view. */
+.null-app.null-private {
+  color-scheme: dark;
+  --chrome-bg: #100c18;
+  --chrome-toolbar: #17111f;
+  --chrome-surface: #21182d;
+  --chrome-surface-hover: rgba(205, 183, 241, .08);
+  --chrome-surface-active: #30243f;
+  --chrome-connected: var(--chrome-toolbar);
+  --chrome-lift: var(--chrome-surface);
+  --chrome-well: var(--chrome-bg);
+  --content-bg: var(--chrome-bg);
+  --border-subtle: rgba(222, 207, 246, .11);
+  --border-active: rgba(222, 207, 246, .26);
+  --border-divider: rgba(222, 207, 246, .07);
+  --text-primary: #f2edf9;
+  --text-secondary: #c5b9d7;
+  --text-muted: #a597ba;
+  --accent: #f2edf9;
+  --accent-subtle: rgba(214, 190, 250, .09);
+  --accent-border: rgba(214, 190, 250, .42);
+  --accent-foreground: #17111f;
+  --danger: #ed8d9e;
+  --danger-subtle: rgba(237, 141, 158, .1);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, .2);
+  --shadow-popover: 0 16px 44px rgba(0, 0, 0, .38);
+}
+.null-private .null-newtab {
+  background: radial-gradient(ellipse at 50% 110%, rgba(115, 57, 196, .2), transparent 65%),
+    linear-gradient(180deg, #0e0a17 0%, #1d1036 46%, #39156c 100%);
+}
+.null-private .null-newtab-search {
+  background: rgba(18, 11, 31, .65);
+  border-color: rgba(223, 205, 250, .24);
+}
+.null-private .null-newtab-search:hover {
+  background: rgba(25, 15, 43, .78);
+  border-color: rgba(223, 205, 250, .4);
+}
+.null-private .null-newtab-search:focus-within {
+  background: rgba(25, 15, 43, .78);
+  border-color: #bca1e4;
+  box-shadow: 0 0 0 3px rgba(195, 158, 246, .12);
+}
+.null-private .null-newtab-search-icon { color: #c5b9d7; }
+.null-private[data-platform="darwin"] .null-tabbar {
+  padding-left: 148px;
+  min-height: 38px;
+}

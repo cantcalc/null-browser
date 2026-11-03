@@ -3,10 +3,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const targetUrl = process.env.AERO_EXTERNAL_URL;
-const targetName = process.env.AERO_EXTERNAL_NAME || 'external-site';
-const settleMs = Number(process.env.AERO_EXTERNAL_SETTLE_MS || 2500);
-const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aero-p0-site-'));
+const targetUrl = process.env.NULL_EXTERNAL_URL;
+const targetName = process.env.NULL_EXTERNAL_NAME || 'external-site';
+const settleMs = Number(process.env.NULL_EXTERNAL_SETTLE_MS || 2500);
+const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'null-p0-site-'));
 app.setPath('userData', path.join(runtimeDir, 'profile'));
 
 function domainOf(rawUrl) {
@@ -24,13 +24,13 @@ function delay(ms) {
 }
 
 if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
-  console.error('AERO_EXTERNAL_URL must be an http(s) URL');
+  console.error('NULL_EXTERNAL_URL must be an http(s) URL');
   process.exitCode = 2;
   app.quit();
 } else {
   app.whenReady().then(async () => {
     const startedAt = Date.now();
-    const partition = `aero-p0-site-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const partition = `null-p0-site-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const ses = session.fromPartition(partition);
     const win = new BrowserWindow({
       show: false,

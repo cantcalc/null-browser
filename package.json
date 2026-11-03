@@ -1,39 +1,49 @@
 {
-  "name": "aero-browser",
-  "version": "1.0.0",
-  "description": "Minimal Electron desktop browser with native tabs, translation, and host-based blocking",
+  "name": "null-browser",
+  "version": "1.0.1-beta.1",
+  "description": "가벼운 사용 흐름과 워크스페이스별 세션을 갖춘 Chromium 기반 데스크톱 브라우저",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cantcalc/aero-browser.git"
+    "url": "https://github.com/cantcalc/null-browser.git"
   },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev:vite": "vite",
-    "build:electron": "esbuild electron/main.ts --bundle --platform=node --external:electron --outfile=dist-electron/main.js && esbuild electron/preload.ts --bundle --platform=node --external:electron --outfile=dist-electron/preload.js && esbuild electron/guestPreload.ts --bundle --platform=node --external:electron --outfile=dist-electron/guestPreload.js",
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --external:electron --external:electron-chrome-extensions --external:electron-chrome-web-store --outfile=dist-electron/main.js && esbuild electron/preload.ts --bundle --platform=node --external:electron --outfile=dist-electron/preload.js && esbuild electron/guestPreload.ts --bundle --platform=node --external:electron --outfile=dist-electron/guestPreload.js && esbuild electron/webStorePreload.ts --bundle --platform=node --external:electron --outfile=dist-electron/webStorePreload.js && esbuild electron/extensionCompatPreload.ts --bundle --platform=node --external:electron --outfile=dist-electron/extensionCompatPreload.js",
+    "test:extensions": "npm run build:electron && node scratch/run-extension-qa.js",
+    "test:extensions:packaged": "node scratch/verify-packaged-extensions.js",
+    "test:settings": "npm run build && node scratch/verify-settings.js",
+    "test:search-inputs": "npm run build && node scratch/verify-search-inputs.js",
+    "test:interactions": "npm run build && cross-env NULL_INTERACTION_QA=true node scratch/verify-search-inputs.js",
+    "test:performance": "esbuild scratch/verify-performance.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/null-verify-performance.js && electron /tmp/null-verify-performance.js",
+    "test:lightweight": "esbuild scratch/verify-lightweight-startup.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/null-lightweight-qa.js && electron /tmp/null-lightweight-qa.js",
+    "test:workspaces": "npm run build && esbuild scratch/verify-workspace-sessions.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/null-workspace-sessions.js && electron /tmp/null-workspace-sessions.js && cross-env NULL_WORKSPACE_QA=true node scratch/verify-search-inputs.js",
     "build:vite": "vite build",
     "build": "npm run build:vite && npm run build:electron",
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npm run build:electron && cross-env NODE_ENV=development electron .\"",
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
     "test:navigation": "node scratch/verify-navigation-parser.js",
     "test:tabs": "electron scratch/verify-webcontentsview.js",
-    "test:core": "esbuild scratch/verify-core-issues.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/aero-verify-core-issues.js && electron /tmp/aero-verify-core-issues.js",
+    "test:core": "esbuild scratch/verify-core-issues.ts --bundle --platform=node --format=cjs --external:electron --outfile=/tmp/null-verify-core-issues.js && electron /tmp/null-verify-core-issues.js",
     "test:runtime": "electron scratch/verify-full-runtime.js",
     "start": "npm run build && electron .",
-    "package:mac": "npm run build && electron-builder --mac --dir --publish never && codesign --force --deep --sign - \"release/mac-arm64/Aero Browser.app\"",
-    "dist:mac": "npm run build && electron-builder --mac --dir --publish never && codesign --force --deep --sign - \"release/mac-arm64/Aero Browser.app\" && electron-builder --mac dmg zip --prepackaged \"release/mac-arm64/Aero Browser.app\" --publish never",
-    "package:win": "npm run build && electron-builder --win --x64 --dir --publish never",
-    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never"
+    "package:mac": "npm run build && npm run licenses && node scripts/package-mac.cjs --dir",
+    "dist:mac": "npm run build && npm run licenses && node scripts/package-mac.cjs",
+    "package:win": "npm run build && npm run licenses && electron-builder --win --x64 --dir --publish never",
+    "dist:win": "npm run build && npm run licenses && electron-builder --win nsis --x64 --publish never",
+    "licenses": "node scripts/generate-notices.cjs",
+    "verify:release": "node scripts/verify-release.cjs"
   },
   "build": {
     "appId": "com.aero.browser",
-    "productName": "Aero Browser",
+    "productName": "NULL",
     "directories": {
       "output": "release"
     },
     "publish": {
       "provider": "github",
       "owner": "cantcalc",
-      "repo": "aero-browser-releases",
+      "repo": "null-browser",
       "releaseType": "release"
     },
     "files": [
@@ -44,6 +54,18 @@
       {
         "from": "assets/app-update.yml",
         "to": "app-update.yml"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.txt",
+        "to": "licenses/THIRD_PARTY_NOTICES.txt"
+      },
+      {
+        "from": "node_modules/electron/dist/LICENSE",
+        "to": "licenses/LICENSE.electron.txt"
+      },
+      {
+        "from": "node_modules/electron/dist/LICENSES.chromium.html",
+        "to": "licenses/LICENSES.chromium.html"
       }
     ],
     "mac": {
@@ -52,11 +74,15 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         }
       ]
     },
@@ -65,10 +91,12 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "artifactName": "Aero Browser Setup ${version}.${ext}"
+      "artifactName": "NULL-Setup-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -76,16 +104,22 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Aero Browser"
-    }
+      "shortcutName": "NULL"
+    },
+    "artifactName": "NULL-${version}-${arch}.${ext}"
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "electron-chrome-extensions": "4.10.0",
+    "electron-chrome-web-store": "0.13.0",
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.0.1"
+  },
+  "overrides": {
+    "adm-zip": "0.6.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
@@ -95,12 +129,19 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "electron": "^34.0.0",
+    "electron": "45.2.1",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
+    "js-yaml": "4.3.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.3",
     "vite": "^6.0.0",
     "wait-on": "^8.0.2"
-  }
+  },
+  "homepage": "https://github.com/cantcalc/null-browser",
+  "bugs": {
+    "url": "https://github.com/cantcalc/null-browser/issues"
+  },
+  "author": "NULL Browser contributors",
+  "license": "UNLICENSED"
 }

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { injectBrowserAction } from 'electron-chrome-extensions/browser-action';
 import { HistoryItem, SearchHistoryItem, BookmarkItem, ClosedTab, DownloadItemInfo, BrowserSettings, FavoriteItem, ClearDataOptions, Workspace, PermissionPrompt, UpdateStatus, InstalledExtension } from './types';
 
 export interface ElectronAPI {
@@ -6,6 +7,7 @@ export interface ElectronAPI {
   maximizeWindow: () => void;
   closeWindow: () => void;
   isMaximized: () => Promise<boolean>;
+  onWindowResized: (callback: () => void) => () => void;
 
   // Settings & Preferences
   getSettings: () => Promise<BrowserSettings>;
@@ -72,11 +74,11 @@ export interface ElectronAPI {
   listExtensions: () => Promise<InstalledExtension[]>;
   installExtension: () => Promise<{ ok: boolean; extension?: InstalledExtension; error?: string }>;
   removeExtension: (id: string) => Promise<boolean>;
-
-  // AdBlock
-  getAdBlockStats: () => Promise<{ enabled: boolean; blockedCount: number }>;
-  toggleAdBlock: (enabled?: boolean) => Promise<boolean>;
-  onAdBlocked: (callback: (count: number) => void) => () => void;
+  openExtensionStore: () => void;
+  onExtensionsChanged: (callback: () => void) => () => void;
+  onExtensionTabCreated: (callback: (data: { id: string; url: string; active: boolean; workspaceId?: string }) => void) => () => void;
+  onExtensionTabSelected: (callback: (id: string) => void) => () => void;
+  onExtensionTabClosed: (callback: (id: string) => void) => () => void;
 
   // History
   getHistory: () => Promise<HistoryItem[]>;
@@ -130,11 +132,7 @@ export interface ElectronAPI {
   onOpenLinkInPrivateWindow: (callback: (url: string) => void) => () => void;
   openExternal: (url: string) => void;
 
-  // Translation
-  translateText: (text: string, targetLang?: string) => Promise<string>;
-  translateBatch: (texts: string[], targetLang?: string) => Promise<string[]>;
-  onTranslateActive: (callback: () => void) => () => void;
-  onSelectionTranslate: (callback: (text: string) => void) => () => void;
+  // Permission prompts
   onPermissionRequest: (callback: (request: PermissionPrompt) => void) => () => void;
   resolvePermissionRequest: (requestId: string, decision: 'allow' | 'deny' | 'once') => void;
 
@@ -146,7 +144,7 @@ export interface ElectronAPI {
   onMenuAction: (callback: (action: string) => void) => () => void;
 
   // Native WebContentsView Tab API
-  createTab: (tabId: string, initialUrl?: string, isIncognito?: boolean) => void;
+  createTab: (tabId: string, initialUrl?: string, isIncognito?: boolean, workspaceId?: string, deferLoad?: boolean) => void;
   closeTab: (tabId: string) => void;
   switchTab: (tabId: string) => void;
   navigateTab: (tabId: string, url: string) => void;
@@ -159,7 +157,6 @@ export interface ElectronAPI {
   findInTab: (tabId: string, text: string, forward: boolean) => void;
   stopFindInTab: (tabId: string) => void;
   toggleTabDevTools: (tabId: string) => void;
-  translateTab: (tabId: string) => Promise<boolean>;
   setTabViewBounds: (bounds: { x: number; y: number; width: number; height: number }) => void;
   setTabOverlay: (isOverlay: boolean) => void;
   setSplitView: (enabled: boolean, secondaryTabId?: string | null, ratio?: number) => void;
@@ -168,7 +165,7 @@ export interface ElectronAPI {
   onTabStatusUpdated: (callback: (data: { id: string; url?: string; title?: string; canGoBack?: boolean; canGoForward?: boolean; isLoading?: boolean; favicon?: string; lifecycle?: 'active' | 'background' | 'crashed'; error?: { code: number; description: string; url: string } | null }) => void) => () => void;
   onTabFoundInPage: (callback: (data: { id: string; activeMatchOrdinal: number; matches: number }) => void) => () => void;
   onTabAudioChanged: (callback: (data: { id: string; audioPlaying: boolean }) => void) => () => void;
-  onTabGesture: (callback: (data: { action: string }) => void) => () => void;
+  onTabGesture: (callback: (data: { action: string; tabId: string }) => void) => () => void;
   onTabSwitchShortcut: (callback: (shortcut: number) => void) => () => void;
   onTabSwitchRelative: (callback: (delta: number) => void) => () => void;
   onTabHtmlFullscreen: (callback: (data: { id: string; fullscreen: boolean }) => void) => () => void;
@@ -181,6 +178,11 @@ const electronAPI: ElectronAPI = {
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
   isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  onWindowResized: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('window:resized', listener);
+    return () => ipcRenderer.removeListener('window:resized', listener);
+  },
 
   getSettings: () => ipcRenderer.invoke('settings:get'),
   updateSettings: (updates) => ipcRenderer.invoke('settings:update', updates),
@@ -233,13 +235,26 @@ const electronAPI: ElectronAPI = {
   listExtensions: () => ipcRenderer.invoke('extensions:list'),
   installExtension: () => ipcRenderer.invoke('extensions:install'),
   removeExtension: (id) => ipcRenderer.invoke('extensions:remove', id),
-
-  getAdBlockStats: () => ipcRenderer.invoke('adblock:getStats'),
-  toggleAdBlock: (enabled) => ipcRenderer.invoke('adblock:toggle', enabled),
-  onAdBlocked: (callback) => {
-    const sub = (_e: any, count: number) => callback(count);
-    ipcRenderer.on('adblock:blocked', sub);
-    return () => ipcRenderer.removeListener('adblock:blocked', sub);
+  openExtensionStore: () => ipcRenderer.send('extensions:open-store'),
+  onExtensionsChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('extensions:changed', listener);
+    return () => ipcRenderer.removeListener('extensions:changed', listener);
+  },
+  onExtensionTabCreated: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: { id: string; url: string; active: boolean }) => callback(data);
+    ipcRenderer.on('tab:extension-created', listener);
+    return () => ipcRenderer.removeListener('tab:extension-created', listener);
+  },
+  onExtensionTabSelected: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, id: string) => callback(id);
+    ipcRenderer.on('tab:extension-selected', listener);
+    return () => ipcRenderer.removeListener('tab:extension-selected', listener);
+  },
+  onExtensionTabClosed: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, id: string) => callback(id);
+    ipcRenderer.on('tab:extension-closed', listener);
+    return () => ipcRenderer.removeListener('tab:extension-closed', listener);
   },
 
   getHistory: () => ipcRenderer.invoke('history:get'),
@@ -314,18 +329,6 @@ const electronAPI: ElectronAPI = {
   },
   openExternal: (url) => ipcRenderer.send('shell:openExternal', url),
 
-  translateText: (text, targetLang) => ipcRenderer.invoke('translate:text', text, targetLang),
-  translateBatch: (texts, targetLang) => ipcRenderer.invoke('translate:batch', texts, targetLang),
-  onTranslateActive: (callback) => {
-    const sub = () => callback();
-    ipcRenderer.on('tab:translate-active', sub);
-    return () => ipcRenderer.removeListener('tab:translate-active', sub);
-  },
-  onSelectionTranslate: (callback) => {
-    const sub = (_e: any, text: string) => callback(text);
-    ipcRenderer.on('tab:selection-translate', sub);
-    return () => ipcRenderer.removeListener('tab:selection-translate', sub);
-  },
   onPermissionRequest: (callback) => {
     const sub = (_e: any, request: PermissionPrompt) => callback(request);
     ipcRenderer.on('permission:request', sub);
@@ -355,7 +358,6 @@ const electronAPI: ElectronAPI = {
       'menu:toggle-bookmark-bar',
       'menu:reopen-closed-tab',
       'menu:open-library',
-      'menu:open-command-palette',
       'menu:open-settings',
       'menu:open-about',
       'menu:reload',
@@ -379,7 +381,7 @@ const electronAPI: ElectronAPI = {
   },
 
   // Native WebContentsView Tab API implementations
-  createTab: (id, url, isIncognito) => ipcRenderer.send('tab:create', { id, url, isIncognito }),
+  createTab: (id, url, isIncognito, workspaceId, deferLoad) => ipcRenderer.send('tab:create', { id, url, isIncognito, workspaceId, deferLoad }),
   closeTab: (tabId) => ipcRenderer.send('tab:close', tabId),
   switchTab: (tabId) => ipcRenderer.send('tab:switch', tabId),
   navigateTab: (id, url) => ipcRenderer.send('tab:navigate', { id, url }),
@@ -392,7 +394,6 @@ const electronAPI: ElectronAPI = {
   findInTab: (id, text, forward) => ipcRenderer.send('tab:find', { id, text, forward }),
   stopFindInTab: (tabId) => ipcRenderer.send('tab:stopFind', tabId),
   toggleTabDevTools: (tabId) => ipcRenderer.send('tab:toggleDevTools', tabId),
-  translateTab: (tabId) => ipcRenderer.invoke('tab:translate', tabId),
   setTabViewBounds: (bounds) => ipcRenderer.send('tab:setBounds', bounds),
   setTabOverlay: (isOverlay) => ipcRenderer.send('tab:setOverlay', isOverlay),
   setSplitView: (enabled, secondaryTabId, ratio) => ipcRenderer.send('tab:setSplit', { enabled, secondaryTabId, ratio }),
@@ -438,3 +439,4 @@ const electronAPI: ElectronAPI = {
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+if (new URLSearchParams(location.search).get('incognito') !== '1') injectBrowserAction();

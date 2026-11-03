@@ -3,10 +3,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const rawSites = process.env.AERO_EXTERNAL_SITES;
+const rawSites = process.env.NULL_EXTERNAL_SITES;
 const sites = rawSites ? JSON.parse(rawSites) : [];
-const settleMs = Number(process.env.AERO_EXTERNAL_SETTLE_MS || 1000);
-const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aero-p0-sequence-'));
+const settleMs = Number(process.env.NULL_EXTERNAL_SETTLE_MS || 1000);
+const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'null-p0-sequence-'));
 app.setPath('userData', path.join(runtimeDir, 'profile'));
 
 function domainOf(rawUrl) {
@@ -21,12 +21,12 @@ function log(event, payload = {}) {
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (!Array.isArray(sites) || sites.length === 0 || sites.some((site) => !site || !/^https?:\/\//i.test(site.url))) {
-  console.error('AERO_EXTERNAL_SITES must be a non-empty JSON array of {name,url} http(s) entries');
+  console.error('NULL_EXTERNAL_SITES must be a non-empty JSON array of {name,url} http(s) entries');
   process.exitCode = 2;
   app.quit();
 } else {
   app.whenReady().then(async () => {
-    const partition = `aero-p0-sequence-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const partition = `null-p0-sequence-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const ses = session.fromPartition(partition);
     const win = new BrowserWindow({ show: false, width: 1200, height: 800, webPreferences: { session: ses, sandbox: true, nodeIntegration: false, contextIsolation: true } });
     const wc = win.webContents;

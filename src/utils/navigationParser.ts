@@ -1,14 +1,13 @@
-import { SearchEngine, SearchShortcut } from '../types/browser';
+import { SearchEngine } from '../types/browser';
 
 export interface NavigationParserOptions {
   searchEngine?: SearchEngine;
   customSearchUrl?: string;
-  searchShortcuts?: SearchShortcut[];
 }
 
 export interface NavigationResult {
   url: string;
-  type: 'internal' | 'url' | 'search' | 'shortcut';
+  type: 'internal' | 'url' | 'search';
   originalQuery: string;
   searchQuery?: string;
   searchEngine?: string;
@@ -81,42 +80,23 @@ export function parseNavigationInput(
   const query = (rawInput || '').trim();
   if (!query) {
     return {
-      url: 'aero://newtab',
+      url: 'null://newtab',
       type: 'internal',
       originalQuery: query,
     };
   }
 
-  // 1. Search Shortcut Matching (e.g., "g react", "gh electron", "n 날씨")
-  const parts = query.split(/\s+/);
-  const prefix = parts[0].toLowerCase();
-  const queryArg = parts.slice(1).join(' ').trim();
-
-  const shortcuts = options.searchShortcuts || [];
-  const matchedShortcut = shortcuts.find((s) => s.keyword.toLowerCase() === prefix);
-
-  if (matchedShortcut && queryArg && isSafeSearchTemplate(matchedShortcut.searchUrl)) {
-    const searchUrl = matchedShortcut.searchUrl.replace('%s', encodeURIComponent(queryArg));
+  // 1. Internal Protocol normalizations (null:// and legacy browser://)
+  if (/^(null|vyro|aero|browser):\/\//i.test(query)) {
+    const route = query.replace(/^(null|vyro|aero|browser):\/\//i, '');
     return {
-      url: searchUrl,
-      type: 'shortcut',
-      originalQuery: query,
-      searchQuery: queryArg,
-      searchEngine: matchedShortcut.keyword,
-    };
-  }
-
-  // 2. Internal Protocol normalizations (aero:// and legacy browser://)
-  if (/^(aero|browser):\/\//i.test(query)) {
-    const route = query.replace(/^(aero|browser):\/\//i, '');
-    return {
-      url: `aero://${route || 'newtab'}`,
+      url: `null://${route || 'newtab'}`,
       type: 'internal',
       originalQuery: query,
     };
   }
 
-  // 3. Supported Explicit Web Protocols
+  // 2. Supported Explicit Web Protocols
   if (isExplicitUrl(query) || /^about:blank(?:[#?].*)?$/i.test(query)) {
     return {
       url: query,
@@ -125,7 +105,7 @@ export function parseNavigationInput(
     };
   }
 
-  // 4. Localhost handling (with or without port/path)
+  // 3. Localhost handling (with or without port/path)
   if (
     query === 'localhost' ||
     query.startsWith('localhost:') ||
@@ -145,7 +125,7 @@ export function parseNavigationInput(
     }
   }
 
-  // 5. IPv4 check
+  // 4. IPv4 check
   if (IPV4_REGEX.test(query) && isValidHttpTarget(query)) {
     return {
       url: `http://${query}`,
@@ -154,7 +134,7 @@ export function parseNavigationInput(
     };
   }
 
-  // 6. IPv6 check
+  // 5. IPv6 check
   if (IPV6_REGEX.test(query) && isValidHttpTarget(query)) {
     return {
       url: `http://${query}`,
@@ -163,7 +143,7 @@ export function parseNavigationInput(
     };
   }
 
-  // 7. Domain Name Resolution. Validate the complete authority (including
+  // 6. Domain Name Resolution. Validate the complete authority (including
   // ports) instead of maintaining a brittle, incomplete TLD allow-list.
   if (looksLikeWebHost(query)) {
     return {
@@ -173,7 +153,7 @@ export function parseNavigationInput(
     };
   }
 
-  // 8. Default to Search Engine
+  // 7. Default to Search Engine
   const engine = options.searchEngine || 'google';
   let template = BUILTIN_SEARCH_ENGINES[engine] || BUILTIN_SEARCH_ENGINES.google;
   if (engine === 'custom' && options.customSearchUrl && isSafeSearchTemplate(options.customSearchUrl)) {

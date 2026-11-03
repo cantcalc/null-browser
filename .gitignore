@@ -3,6 +3,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+release-review-*/
 out/
 build/
 
@@ -14,6 +15,7 @@ build/
 *.blockmap
 latest*.yml
 app-update.yml
+!assets/app-update.yml
 
 # Local configuration and secrets
 .env
@@ -44,3 +46,17 @@ temp/
 *.crash
 *.part
 *.download
+
+# Local work reports/concept renders are not product source. Existing Git
+# history is retained; the files remain available locally after index cleanup.
+/*REPORT*.md
+/*REPORT*.txt
+/BROWSER_PERFORMANCE_ANALYSIS_*.md
+/WEB_STORE_LIVE_QA_*.md
+/assets/brand-explorations/
+/assets/icon-preview.png
+/docs/private/
+
+# Keep internal root work notes local; publish user-facing docs/ instead.
+/*.md
+!README.md

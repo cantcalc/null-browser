@@ -1,52 +1,24 @@
 import type { BrowserSettings } from '../types/browser';
 
-export type ThemeOption = {
-  id: BrowserSettings['theme'];
-  label: string;
-  desc: string;
-  swatch: string;
-  border: string;
-  defaultAccent?: string;
-};
-
-export const THEME_OPTIONS: ThemeOption[] = [
-  { id: 'noir', label: 'Noir', desc: '검정 배경 · 흰색 액센트', swatch: '#050505', border: '#3b3b3b', defaultAccent: '#ffffff' },
-  { id: 'paper', label: 'Paper', desc: '흰색 배경 · 검정 액센트', swatch: '#ffffff', border: '#cbd5e1', defaultAccent: '#111827' },
-  { id: 'graphite', label: 'Graphite', desc: '차분한 슬레이트', swatch: '#13151a', border: '#282c37' },
-  { id: 'midnight', label: 'Midnight', desc: '깊은 네이비', swatch: '#070d18', border: '#1a2c4e' },
-  { id: 'forest', label: 'Forest', desc: '보태니컬 그린', swatch: '#061510', border: '#173f30' },
-  { id: 'aurora', label: 'Aurora', desc: '벨벳 바이올렛', swatch: '#11091c', border: '#321e52' },
-  { id: 'sunset', label: 'Sunset', desc: '따뜻한 앰버', swatch: '#181310', border: '#3d3128' },
-  { id: 'oled', label: 'OLED Black', desc: '완전한 블랙', swatch: '#000000', border: '#1c1c1c' },
-  { id: 'light', label: 'Snow Light', desc: '깨끗한 라이트', swatch: '#f1f3f7', border: '#cbd5e1' },
-  { id: 'cobalt', label: 'Cobalt', desc: '차가운 블루 스틸', swatch: '#08111f', border: '#244a78', defaultAccent: '#22d3ee' },
-  { id: 'clay', label: 'Clay', desc: '깊은 테라코타', swatch: '#1b1110', border: '#63352e', defaultAccent: '#fb7185' },
-  { id: 'mist', label: 'Mist', desc: '부드러운 아이스 블루', swatch: '#eaf2f8', border: '#bfd5e8', defaultAccent: '#2563eb' },
+export const INTERFACE_STYLES: { id: BrowserSettings['interfaceStyle']; label: string; description: string }[] = [
+  { id: 'core', label: 'Core', description: '작고 담백한 기본형' },
+  { id: 'air', label: 'Air', description: '부드러운 곡선과 편안한 여백' },
+  { id: 'studio', label: 'Studio', description: '툴바로 이어지는 연결형 탭' },
+  { id: 'focus', label: 'Focus', description: '가벼운 선과 넓은 작업 공간' },
+  { id: 'outline', label: 'Outline', description: '얇은 윤곽과 단정한 독립형 탭' },
 ];
 
-export const ACCENT_OPTIONS = [
-  { color: '#3b82f6', label: 'Blue' },
-  { color: '#10b981', label: 'Emerald' },
-  { color: '#8b5cf6', label: 'Purple' },
-  { color: '#f59e0b', label: 'Amber' },
-  { color: '#f43f5e', label: 'Rose' },
-  { color: '#22d3ee', label: 'Cyan' },
-  { color: '#fb7185', label: 'Coral' },
-  { color: '#ffffff', label: 'White' },
-  { color: '#111827', label: 'Ink' },
+export const THEME_OPTIONS: {
+  id: BrowserSettings['theme']; label: string; desc: string; swatch: string; border: string;
+}[] = [
+  { id: 'noir', label: '다크', desc: '차분한 차콜과 부드러운 명암', swatch: '#151515', border: '#3a3a3a' },
+  { id: 'paper', label: '화이트', desc: '깨끗한 화이트와 선명한 대비', swatch: '#ffffff', border: '#d6d6d6' },
 ];
 
-export function getThemeOption(theme: BrowserSettings['theme']): ThemeOption | undefined {
-  return THEME_OPTIONS.find((option) => option.id === theme);
-}
-
-export function getAccentForeground(color: string): string {
-  const match = /^#([0-9a-f]{6})$/i.exec(color.trim());
-  if (!match) return '#ffffff';
-  const value = Number.parseInt(match[1], 16);
-  const red = (value >> 16) & 0xff;
-  const green = (value >> 8) & 0xff;
-  const blue = value & 0xff;
-  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
-  return luminance > 0.62 ? '#111827' : '#ffffff';
-}
+export const HOME_STYLES: { id: BrowserSettings['homeStyle']; label: string; description: string }[] = [
+  { id: 'center', label: 'Center', description: '중앙에 균형 있게 놓인 로고와 검색창' },
+  { id: 'compact', label: 'Compact', description: '작은 로고와 짧고 단정한 검색창' },
+  { id: 'elevated', label: 'Elevated', description: '시선이 머무는 위쪽과 부드러운 검색창' },
+  { id: 'horizontal', label: 'Horizontal', description: '로고 옆으로 이어지는 가로형 검색창' },
+  { id: 'grounded', label: 'Grounded', description: '아래쪽에 놓인 큰 로고와 넓은 검색창' },
+];

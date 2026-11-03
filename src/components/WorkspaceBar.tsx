@@ -1,6 +1,7 @@
 import React from 'react';
 import { Columns2, Minus, Pencil, Plus } from 'lucide-react';
 import { Tab, Workspace } from '../types/browser';
+import { isInternalPageUrl } from '../../shared/internalPages';
 
 export interface WorkspaceControlsProps {
   workspaces: Workspace[];
@@ -37,21 +38,20 @@ export const WorkspaceControls: React.FC<WorkspaceControlsProps> = ({
   onSplitRatioChange,
   compact = false,
 }) => {
-  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
-  const isSplitable = (tab: Tab) => !/^((aero|browser):\/\/|about:blank)/i.test(tab.url);
+  const isSplitable = (tab: Tab) => !isInternalPageUrl(tab.url);
   const canSplit = tabs.filter(isSplitable).length >= 2;
   const splitCandidates = tabs.filter((tab) => tab.id !== activeTabId && isSplitable(tab));
 
   return (
     <div className={`flex items-center gap-1.5 min-w-0 titlebar-no-drag ${compact ? 'shrink-0' : ''}`}>
       {!compact && <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] max-[480px]:hidden">Workspace</span>}
-      <span className="w-1.5 h-1.5 rounded-full titlebar-no-drag" style={{ backgroundColor: activeWorkspace?.color || 'var(--accent)' }} />
+      <span className="w-1.5 h-1.5 rounded-full titlebar-no-drag bg-[var(--text-secondary)]" />
       <select
         value={activeWorkspaceId}
         onChange={(event) => onSelectWorkspace(event.target.value)}
         className={`${compact ? 'w-24 max-w-24 max-[900px]:w-20 max-[900px]:max-w-20' : 'w-32 max-w-32 max-[480px]:w-20 max-[480px]:max-w-20'} min-w-0 bg-transparent text-[11px] text-[var(--text-primary)] outline-none cursor-pointer titlebar-no-drag`}
         aria-label="워크스페이스 선택"
-        title="워크스페이스 선택"
+        title="워크스페이스별로 로그인·쿠키·사이트 데이터를 분리합니다"
       >
         {workspaces.map((workspace) => (
           <option key={workspace.id} value={workspace.id} className="bg-[var(--chrome-surface)]">
@@ -59,13 +59,13 @@ export const WorkspaceControls: React.FC<WorkspaceControlsProps> = ({
           </option>
         ))}
       </select>
-      <button onClick={onRenameWorkspace} title="현재 워크스페이스 이름 수정" aria-label="현재 워크스페이스 이름 수정" className="aero-icon-button !h-7 !w-7 shrink-0 titlebar-no-drag max-[360px]:hidden">
+      <button onClick={onRenameWorkspace} title="현재 워크스페이스 이름 수정" aria-label="현재 워크스페이스 이름 수정" className="null-icon-button !h-7 !w-7 shrink-0 titlebar-no-drag max-[360px]:hidden">
         <Pencil className="w-3 h-3" />
       </button>
-      <button onClick={onCreateWorkspace} title="워크스페이스 추가" aria-label="워크스페이스 추가" className="aero-icon-button !h-7 !w-7 shrink-0 titlebar-no-drag">
+      <button onClick={onCreateWorkspace} title="워크스페이스 추가" aria-label="워크스페이스 추가" className="null-icon-button !h-7 !w-7 shrink-0 titlebar-no-drag">
         <Plus className="w-3 h-3" />
       </button>
-      <button onClick={onDeleteWorkspace} disabled={workspaces.length <= 1} title="현재 워크스페이스 삭제" aria-label="현재 워크스페이스 삭제" className="aero-icon-button !h-7 !w-7 shrink-0 hover:!bg-[var(--danger-subtle)] hover:!text-[var(--danger)] disabled:opacity-30 titlebar-no-drag max-[480px]:hidden">
+      <button onClick={onDeleteWorkspace} disabled={workspaces.length <= 1} title="현재 워크스페이스 삭제" aria-label="현재 워크스페이스 삭제" className="null-icon-button !h-7 !w-7 shrink-0 hover:!bg-[var(--danger-subtle)] hover:!text-[var(--danger)] disabled:opacity-30 titlebar-no-drag max-[480px]:hidden">
         <Minus className="w-3 h-3" />
       </button>
       {splitEnabled && (
@@ -95,7 +95,7 @@ export const WorkspaceControls: React.FC<WorkspaceControlsProps> = ({
           </select>
         </>
       )}
-      <button onClick={onToggleSplit} disabled={!canSplit && !splitEnabled} title={splitEnabled ? '분할 화면 닫기' : '현재 워크스페이스를 분할 화면으로 보기'} aria-label={splitEnabled ? '분할 화면 닫기' : '분할 화면'} className={`aero-quiet-button flex h-7 shrink-0 items-center gap-1 px-2 text-[10px] titlebar-no-drag max-[700px]:px-1.5 ${splitEnabled ? 'border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent)]' : 'border-transparent disabled:opacity-30'}`}>
+      <button onClick={onToggleSplit} disabled={!canSplit && !splitEnabled} title={splitEnabled ? '분할 화면 닫기' : '현재 워크스페이스를 분할 화면으로 보기'} aria-label={splitEnabled ? '분할 화면 닫기' : '분할 화면'} className={`null-quiet-button flex h-7 shrink-0 items-center gap-1 px-2 text-[10px] titlebar-no-drag max-[700px]:px-1.5 ${splitEnabled ? 'border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent)]' : 'border-transparent disabled:opacity-30'}`}>
         <Columns2 className="w-3 h-3" />
         <span className="max-[700px]:hidden">{splitEnabled ? '분할 중' : '분할'}</span>
       </button>
@@ -103,9 +103,7 @@ export const WorkspaceControls: React.FC<WorkspaceControlsProps> = ({
   );
 };
 
-interface WorkspaceBarProps extends WorkspaceControlsProps {}
-
-export const WorkspaceBar: React.FC<WorkspaceBarProps> = (props) => {
+export const WorkspaceBar: React.FC<WorkspaceControlsProps> = (props) => {
   const isMacOS = window.electronAPI?.platform === 'darwin';
 
   return (
@@ -115,7 +113,7 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = (props) => {
           window.electronAPI?.maximizeWindow();
         }
       }}
-      className="aero-workspacebar flex h-8 min-w-0 items-center gap-2 pl-0 pr-3 select-none titlebar-drag"
+      className="null-workspacebar flex h-8 min-w-0 items-center gap-2 pl-0 pr-3 select-none titlebar-drag"
     >
       {/* Hidden-inset macOS windows draw content behind the traffic lights. */}
       {isMacOS && <div className="h-full w-[148px] max-[700px]:w-24 max-[480px]:w-[76px] flex-shrink-0 titlebar-drag" data-drag-region="true" aria-hidden="true" />}

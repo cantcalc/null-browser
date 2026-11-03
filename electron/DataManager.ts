@@ -2,6 +2,8 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { isInternalPageUrl, isNewTabUrl, normalizeSettingsUrl } from '../shared/internalPages';
+import { normalizeHomeStyle, normalizeInterfaceStyle, normalizeTheme } from '../shared/appearance';
 import { HistoryItem, SearchHistoryItem, BookmarkItem, ClosedTab, BrowserSettings, FavoriteItem, ClearDataOptions, Workspace, DownloadItemInfo } from './types';
 
 const MAX_HISTORY_ENTRIES = 2000;
@@ -21,6 +23,7 @@ interface BrowserStoreData {
   };
   workspaces: Workspace[];
   activeWorkspaceId: string;
+  legacySessionWorkspaceId: string;
   permissions: Record<string, Record<string, 'allow' | 'deny'>>;
   downloads: DownloadItemInfo[];
   settings: BrowserSettings;
@@ -28,29 +31,17 @@ interface BrowserStoreData {
 }
 
 const DEFAULT_SETTINGS: BrowserSettings = {
+  interfaceStyle: 'studio',
+  homeStyle: 'center',
   firstRunCompleted: false,
   theme: 'noir',
-  accentColor: '#ffffff',
   searchEngine: 'google',
   customSearchUrl: 'https://www.google.com/search?q=%s',
-  searchShortcuts: [
-    { keyword: 'g', name: 'Google', searchUrl: 'https://www.google.com/search?q=%s' },
-    { keyword: 'gh', name: 'GitHub', searchUrl: 'https://github.com/search?q=%s' },
-    { keyword: 'yt', name: 'YouTube', searchUrl: 'https://www.youtube.com/results?search_query=%s' },
-    { keyword: 'mdn', name: 'MDN Web Docs', searchUrl: 'https://developer.mozilla.org/search?q=%s' },
-    { keyword: 'n', name: 'Naver', searchUrl: 'https://search.naver.com/search.naver?query=%s' },
-  ],
   saveBrowsingHistory: true,
   saveSearchHistory: true,
   showBookmarkBar: false,
   startupBehavior: 'newtab',
   startupPages: [],
-  newTabConfig: {
-    showFavorites: true,
-    showRecentSites: true,
-    showLogo: true,
-    compactMode: false,
-  },
   favorites: [
     { id: 'fav-1', title: 'Google', url: 'https://www.google.com' },
     { id: 'fav-2', title: 'GitHub', url: 'https://github.com' },
@@ -62,8 +53,6 @@ const DEFAULT_SETTINGS: BrowserSettings = {
   downloadPath: '',
   askDownloadLocation: false,
   siteZoom: {},
-  siteTranslation: {},
-  adBlockEnabled: true,
   cookiePolicy: 'allow',
   cookieExceptions: {},
   preferredLanguages: ['ko-KR', 'en-US'],
@@ -81,11 +70,12 @@ const DEFAULT_STORE: BrowserStoreData = {
   notes: '',
   closedTabs: [],
   session: {
-    tabs: [{ id: 'tab-1', url: 'aero://newtab', title: '새 탭', pinned: false }],
+    tabs: [{ id: 'tab-1', url: 'null://newtab', title: '새 탭', pinned: false }],
     activeTabId: 'tab-1',
   },
   workspaces: [{ id: 'workspace-default', name: 'work', color: '#3b82f6' }],
   activeWorkspaceId: 'workspace-default',
+  legacySessionWorkspaceId: 'workspace-default',
   permissions: {},
   downloads: [],
   settings: DEFAULT_SETTINGS,
@@ -105,8 +95,10 @@ function isSafeSearchTemplate(value: unknown): value is string {
 function canonicalTabUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (!trimmed || trimmed === 'aero://newtab' || trimmed === 'browser://newtab' || /^about:blank(?:[#?].*)?$/i.test(trimmed)) {
-    return 'aero://newtab';
+  const settingsRoute = normalizeSettingsUrl(trimmed);
+  if (settingsRoute) return settingsRoute;
+  if (isNewTabUrl(trimmed)) {
+    return 'null://newtab';
   }
 
   try {
@@ -146,6 +138,7 @@ export class DataManager {
   private filePath: string;
   private data: BrowserStoreData;
   private saveTimeout: NodeJS.Timeout | null = null;
+  private saveRevision = 0;
   private previousRunWasClean = true;
 
   constructor() {
@@ -182,6 +175,11 @@ export class DataManager {
           downloads: this.normalizeDownloads(parsed.downloads),
           session: this.normalizeSession(parsed.session),
           workspaces,
+          // Assign the old shared cookie jar once. Never give it to another
+          // workspace when its original owner is later deleted.
+          legacySessionWorkspaceId: typeof parsed.legacySessionWorkspaceId === 'string' && parsed.legacySessionWorkspaceId.length > 0
+            ? parsed.legacySessionWorkspaceId.slice(0, 100)
+            : workspaces.find((workspace) => workspace.id === 'workspace-default')?.id || workspaces[0].id,
           activeWorkspaceId: typeof parsed.activeWorkspaceId === 'string' && workspaces.some((workspace) => workspace.id === parsed.activeWorkspaceId)
             ? parsed.activeWorkspaceId
             : workspaces[0]?.id || defaults.activeWorkspaceId,
@@ -196,7 +194,6 @@ export class DataManager {
 
   private normalizeSettings(raw: unknown): BrowserSettings {
     const incoming = raw && typeof raw === 'object' ? (raw as Partial<BrowserSettings>) : {};
-    const themes: BrowserSettings['theme'][] = ['noir', 'paper', 'graphite', 'midnight', 'forest', 'aurora', 'sunset', 'oled', 'light', 'cobalt', 'clay', 'mist'];
     const searchEngines: BrowserSettings['searchEngine'][] = ['google', 'naver', 'duckduckgo', 'bing', 'brave', 'custom'];
     const startupBehaviors: BrowserSettings['startupBehavior'][] = ['newtab', 'restore', 'specific'];
     const siteZoom =
@@ -205,14 +202,6 @@ export class DataManager {
             Object.entries(incoming.siteZoom).filter(
               ([origin, zoom]) => Boolean(canonicalOrigin(origin)) && typeof zoom === 'number' && Number.isFinite(zoom)
             ).map(([origin, zoom]) => [canonicalOrigin(origin)!, Math.min(5, Math.max(0.25, zoom as number))])
-          )
-        : {};
-    const siteTranslation =
-      incoming.siteTranslation && typeof incoming.siteTranslation === 'object'
-        ? Object.fromEntries(
-            Object.entries(incoming.siteTranslation).filter(
-              ([origin, mode]) => Boolean(canonicalOrigin(origin)) && (mode === 'always' || mode === 'never' || mode === 'ask')
-            ).map(([origin, mode]) => [canonicalOrigin(origin)!, mode])
           )
         : {};
     const cookieExceptions =
@@ -229,31 +218,12 @@ export class DataManager {
         )))).slice(0, 10)
       : [...DEFAULT_SETTINGS.preferredLanguages];
 
-    const shortcutKeys = new Set<string>();
-    const searchShortcuts = Array.isArray(incoming.searchShortcuts)
-      ? incoming.searchShortcuts
-          .map((item) => {
-            if (!item || typeof item.keyword !== 'string' || typeof item.name !== 'string' || !isSafeSearchTemplate(item.searchUrl)) {
-              return null;
-            }
-            const keyword = item.keyword.trim().toLowerCase();
-            if (!keyword || keyword.length > 32 || /\s/.test(keyword) || shortcutKeys.has(keyword)) return null;
-            shortcutKeys.add(keyword);
-            return {
-              keyword,
-              name: safeTitle(item.name, keyword, 100),
-              searchUrl: item.searchUrl.trim(),
-            };
-          })
-          .filter((item): item is { keyword: string; name: string; searchUrl: string } => Boolean(item))
-      : [...DEFAULT_SETTINGS.searchShortcuts];
-
     const startupPages = Array.isArray(incoming.startupPages)
       ? Array.from(
           new Set(
             incoming.startupPages
               .map((page) => canonicalTabUrl(page))
-              .filter((page): page is string => Boolean(page) && page !== 'aero://newtab')
+              .filter((page): page is string => Boolean(page) && page !== 'null://newtab')
           )
         ).slice(0, 20)
       : [];
@@ -280,21 +250,19 @@ export class DataManager {
           .slice(0, 12)
       : [...DEFAULT_SETTINGS.favorites];
 
+    // Only supported settings may survive profile loads, updates, and legacy imports.
     return {
       ...DEFAULT_SETTINGS,
-      ...incoming,
+      interfaceStyle: normalizeInterfaceStyle(incoming.interfaceStyle),
+      homeStyle: normalizeHomeStyle(incoming.homeStyle),
       firstRunCompleted: typeof incoming.firstRunCompleted === 'boolean' ? incoming.firstRunCompleted : DEFAULT_SETTINGS.firstRunCompleted,
-      theme: themes.includes(incoming.theme as BrowserSettings['theme']) ? incoming.theme as BrowserSettings['theme'] : DEFAULT_SETTINGS.theme,
-      accentColor: typeof incoming.accentColor === 'string' && /^#[0-9a-f]{6}$/i.test(incoming.accentColor)
-        ? incoming.accentColor
-        : DEFAULT_SETTINGS.accentColor,
+      theme: normalizeTheme(incoming.theme),
       searchEngine: searchEngines.includes(incoming.searchEngine as BrowserSettings['searchEngine'])
         ? incoming.searchEngine as BrowserSettings['searchEngine']
         : DEFAULT_SETTINGS.searchEngine,
       customSearchUrl: isSafeSearchTemplate(incoming.customSearchUrl)
         ? incoming.customSearchUrl
         : DEFAULT_SETTINGS.customSearchUrl,
-      searchShortcuts: (searchShortcuts.length > 0 ? searchShortcuts : [...DEFAULT_SETTINGS.searchShortcuts]).slice(0, 50),
       saveBrowsingHistory: typeof incoming.saveBrowsingHistory === 'boolean' ? incoming.saveBrowsingHistory : DEFAULT_SETTINGS.saveBrowsingHistory,
       saveSearchHistory: typeof incoming.saveSearchHistory === 'boolean' ? incoming.saveSearchHistory : DEFAULT_SETTINGS.saveSearchHistory,
       showBookmarkBar: typeof incoming.showBookmarkBar === 'boolean' ? incoming.showBookmarkBar : DEFAULT_SETTINGS.showBookmarkBar,
@@ -302,18 +270,10 @@ export class DataManager {
       startupBehavior: startupBehaviors.includes(incoming.startupBehavior as BrowserSettings['startupBehavior'])
         ? incoming.startupBehavior as BrowserSettings['startupBehavior']
         : DEFAULT_SETTINGS.startupBehavior,
-      newTabConfig: {
-        showFavorites: typeof incoming.newTabConfig?.showFavorites === 'boolean' ? incoming.newTabConfig.showFavorites : DEFAULT_SETTINGS.newTabConfig.showFavorites,
-        showRecentSites: typeof incoming.newTabConfig?.showRecentSites === 'boolean' ? incoming.newTabConfig.showRecentSites : DEFAULT_SETTINGS.newTabConfig.showRecentSites,
-        showLogo: typeof incoming.newTabConfig?.showLogo === 'boolean' ? incoming.newTabConfig.showLogo : DEFAULT_SETTINGS.newTabConfig.showLogo,
-        compactMode: typeof incoming.newTabConfig?.compactMode === 'boolean' ? incoming.newTabConfig.compactMode : DEFAULT_SETTINGS.newTabConfig.compactMode,
-      },
       favorites,
       downloadPath: this.normalizeDownloadPath(incoming.downloadPath),
       askDownloadLocation: typeof incoming.askDownloadLocation === 'boolean' ? incoming.askDownloadLocation : DEFAULT_SETTINGS.askDownloadLocation,
       siteZoom,
-      siteTranslation,
-      adBlockEnabled: typeof incoming.adBlockEnabled === 'boolean' ? incoming.adBlockEnabled : DEFAULT_SETTINGS.adBlockEnabled,
       cookiePolicy: incoming.cookiePolicy === 'block-third-party' ? 'block-third-party' : 'allow',
       cookieExceptions,
       preferredLanguages: preferredLanguages.length > 0 ? preferredLanguages : [...DEFAULT_SETTINGS.preferredLanguages],
@@ -339,7 +299,7 @@ export class DataManager {
     return raw
       .map((item) => {
         const url = canonicalTabUrl(item?.url);
-        if (!url || url === 'aero://newtab') return null;
+        if (!url || url === 'null://newtab') return null;
         const visitedAt = typeof item?.visitedAt === 'number' && Number.isFinite(item.visitedAt) ? item.visitedAt : Date.now();
         return {
           id: typeof item?.id === 'string' && item.id ? item.id.slice(0, 200) : randomUUID(),
@@ -395,7 +355,7 @@ export class DataManager {
     return raw
       .map((item) => {
         const url = canonicalTabUrl(item?.url);
-        if (!url || url === 'aero://newtab') return null;
+        if (!url || url === 'null://newtab') return null;
         return {
           url,
           title: safeTitle(item?.title, url),
@@ -482,11 +442,11 @@ export class DataManager {
               (seenIds.add(tab.id.trim()), true)
           )
           .map((tab) => {
-            const url = canonicalTabUrl(tab.url) || 'aero://newtab';
+            const url = canonicalTabUrl(tab.url) || 'null://newtab';
             return {
               id: tab.id.trim().slice(0, 200),
               url,
-              title: safeTitle(tab.title, url === 'aero://newtab' ? '새 탭' : url),
+              title: safeTitle(tab.title, url === 'null://newtab' ? '새 탭' : url),
               pinned: tab.pinned === true,
               ...(typeof tab.workspaceId === 'string' && tab.workspaceId.trim() ? { workspaceId: tab.workspaceId.trim().slice(0, 100) } : {}),
             };
@@ -502,13 +462,31 @@ export class DataManager {
   }
 
   private scheduleSave() {
+    this.saveRevision++;
     if (this.saveTimeout) clearTimeout(this.saveTimeout);
     this.saveTimeout = setTimeout(() => {
-      this.flushSync();
+      this.saveTimeout = null;
+      void this.persistAsync();
     }, 500);
   }
 
+  private async persistAsync() {
+    const revision = this.saveRevision;
+    const tempPath = `${this.filePath}.async-${revision}.tmp`;
+    try {
+      // Disk writes must not hold up input/navigation on the main thread.
+      await fs.promises.writeFile(tempPath, JSON.stringify(this.data), { encoding: 'utf-8', mode: 0o600 });
+      // This check and the atomic rename are synchronous together. A late
+      // async write can never overwrite newer data or the shutdown flush.
+      if (revision === this.saveRevision) fs.renameSync(tempPath, this.filePath);
+      else await fs.promises.unlink(tempPath).catch(() => {});
+    } catch {
+      await fs.promises.unlink(tempPath).catch(() => {});
+    }
+  }
+
   public flushSync() {
+    this.saveRevision++;
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
       this.saveTimeout = null;
@@ -549,10 +527,6 @@ export class DataManager {
     this.data.settings = this.normalizeSettings({
       ...this.data.settings,
       ...safeUpdates,
-      newTabConfig: {
-        ...this.data.settings.newTabConfig,
-        ...(safeUpdates.newTabConfig || {}),
-      },
     });
     this.scheduleSave();
     return this.getSettings();
@@ -752,7 +726,7 @@ export class DataManager {
   public addHistory(url: string, title: string) {
     if (!this.data.settings.saveBrowsingHistory) return;
     const safeUrl = canonicalTabUrl(url);
-    if (!safeUrl || safeUrl === 'aero://newtab') return;
+    if (!safeUrl || isInternalPageUrl(safeUrl)) return;
     const now = Date.now();
     const recent = this.data.history.find((history) => history.url === safeUrl && now - history.visitedAt < DUPLICATE_NAVIGATION_WINDOW_MS);
     if (recent) {
@@ -904,7 +878,7 @@ export class DataManager {
 
   public pushClosedTab(tab: ClosedTab) {
     const url = canonicalTabUrl(tab?.url);
-    if (!url || url === 'aero://newtab') return;
+    if (!url || url === 'null://newtab') return;
     this.data.closedTabs = [{ url, title: safeTitle(tab.title, url), closedAt: Date.now() }, ...(this.data.closedTabs || [])].slice(0, MAX_RECENTLY_CLOSED);
     this.scheduleSave();
   }
@@ -938,6 +912,8 @@ export class DataManager {
     this.data.activeWorkspaceId = activeWorkspaceId;
     return { workspaces: structuredClone(workspaces), activeWorkspaceId };
   }
+
+  public getLegacySessionWorkspaceId(): string { return this.data.legacySessionWorkspaceId; }
 
   public saveWorkspaces(workspaces: Workspace[], activeWorkspaceId: string): { workspaces: Workspace[]; activeWorkspaceId: string } {
     const normalized = this.normalizeWorkspaces(workspaces);

@@ -37,12 +37,12 @@ export const PermissionPrompt: React.FC<PermissionPromptProps> = ({ request, onR
   }, [onResolve]);
 
   return (
-    <div className="aero-overlay fixed inset-0 z-[80] flex items-start justify-center px-4 pt-24" role="presentation">
+    <div className="null-overlay fixed inset-0 z-[80] flex items-start justify-center px-4 pt-24" role="presentation">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="permission-prompt-title"
-        className="aero-modal w-full max-w-[25rem] p-5 text-[var(--text-primary)]"
+        className="null-modal w-full max-w-[25rem] p-5 text-[var(--text-primary)]"
       >
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--accent-border)] bg-[var(--accent-subtle)] text-[var(--accent)]">
@@ -51,7 +51,7 @@ export const PermissionPrompt: React.FC<PermissionPromptProps> = ({ request, onR
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <h2 id="permission-prompt-title" className="text-sm font-semibold">권한 요청</h2>
-              <button type="button" onClick={() => onResolve('deny')} className="aero-icon-button !h-7 !w-7" aria-label="권한 요청 닫기">
+              <button type="button" onClick={() => onResolve('deny')} className="null-icon-button !h-7 !w-7" aria-label="권한 요청 닫기">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -65,13 +65,13 @@ export const PermissionPrompt: React.FC<PermissionPromptProps> = ({ request, onR
           </div>
         </div>
         <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <button type="button" onClick={() => onResolve('deny')} className="aero-quiet-button px-3 py-2 text-xs">
+          <button type="button" onClick={() => onResolve('deny')} className="null-quiet-button px-3 py-2 text-xs">
             차단
           </button>
-          <button type="button" onClick={() => onResolve('once')} className="aero-quiet-button border-[var(--accent-border)] bg-[var(--accent-subtle)] px-3 py-2 text-xs text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]">
+          <button type="button" onClick={() => onResolve('once')} className="null-quiet-button border-[var(--accent-border)] bg-[var(--accent-subtle)] px-3 py-2 text-xs text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]">
             이번만 허용
           </button>
-          <button ref={allowRef} type="button" onClick={() => onResolve('allow')} className="aero-primary-button px-3 py-2 text-xs font-medium">
+          <button ref={allowRef} type="button" onClick={() => onResolve('allow')} className="null-primary-button px-3 py-2 text-xs font-medium">
             항상 허용
           </button>
         </div>

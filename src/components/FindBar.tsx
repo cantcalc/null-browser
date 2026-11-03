@@ -35,9 +35,7 @@ export const FindBar: React.FC<FindBarProps> = ({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setQuery(val);
-    if (val) {
-      onFind(val, true);
-    }
+    onFind(val, true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -50,8 +48,9 @@ export const FindBar: React.FC<FindBarProps> = ({
   };
 
   return (
-    <div className="find-bar aero-popover absolute top-2 right-4 z-40 p-1 flex items-center gap-1 text-xs select-none">
-      <div className="find-bar-query aero-field flex min-w-0 flex-1 items-center gap-1.5 px-2 h-7">
+    <div className="null-find-row flex h-10 shrink-0 items-center justify-end bg-[var(--chrome-bg)] px-3">
+    <div className="find-bar null-popover relative z-40 flex max-w-full items-center gap-1 p-1 text-xs select-none">
+      <div className="find-bar-query null-field flex min-w-0 flex-1 items-center gap-1.5 px-2 h-7">
         <Search className="w-3 h-3 text-[var(--text-muted)]" />
         <input
           ref={inputRef}
@@ -73,7 +72,7 @@ export const FindBar: React.FC<FindBarProps> = ({
         onClick={() => onFind(query, false)}
         disabled={!query}
         title="이전 결과 (Shift+Enter)"
-        className="aero-icon-button !h-7 !w-7 disabled:opacity-30"
+        className="null-icon-button !h-7 !w-7 disabled:opacity-30"
       >
         <ChevronUp className="w-3.5 h-3.5" />
       </button>
@@ -82,7 +81,7 @@ export const FindBar: React.FC<FindBarProps> = ({
         onClick={() => onFind(query, true)}
         disabled={!query}
         title="다음 결과 (Enter)"
-        className="aero-icon-button !h-7 !w-7 disabled:opacity-30"
+        className="null-icon-button !h-7 !w-7 disabled:opacity-30"
       >
         <ChevronDown className="w-3.5 h-3.5" />
       </button>
@@ -90,10 +89,11 @@ export const FindBar: React.FC<FindBarProps> = ({
       <button
         onClick={onClose}
         title="닫기 (ESC)"
-        className="aero-icon-button !h-7 !w-7"
+        className="null-icon-button !h-7 !w-7"
       >
         <X className="w-3.5 h-3.5" />
       </button>
+    </div>
     </div>
   );
 };

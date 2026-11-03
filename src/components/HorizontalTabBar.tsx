@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Globe, Pin, Volume2, VolumeX, RotateCw, Copy, PanelRight } from 'lucide-react';
+import { Plus, X, Globe, Pin, Volume2, VolumeX, RotateCw, Copy, PanelRight, Settings } from 'lucide-react';
+import { isSettingsUrl } from '../../shared/internalPages';
 import { Tab } from '../types/browser';
 import { shortcutLabel } from '../utils/platform';
 
@@ -115,13 +116,13 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
         }
       }}
       onWheel={handleNavWheel}
-      className="aero-tabbar flex items-center h-10 px-2.5 titlebar-drag select-none z-30"
+      className="null-tabbar flex items-center h-10 px-2.5 titlebar-drag select-none z-30"
     >
       {/* Tabs Container (Interactive tabs have titlebar-no-drag, but container doesn't block dragging) */}
       <nav
         ref={navRef}
         data-tab-strip="true"
-        className="aero-tab-strip flex items-center gap-1 overflow-x-auto no-scrollbar py-1 max-w-[calc(100%-140px)] min-w-0 flex-shrink titlebar-no-drag"
+        className="null-tab-strip flex items-center gap-1 overflow-x-auto no-scrollbar py-1 max-w-[calc(100%-140px)] min-w-0 flex-shrink titlebar-no-drag"
       >
         {/* Pinned Tabs (Compact 28x28 Favicon Pill) */}
         {pinnedTabs.map((tab) => {
@@ -141,11 +142,13 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
               title={tab.title || tab.url}
               data-active={isActive}
-              className="aero-tab aero-tab-pinned relative flex h-7 w-7 flex-shrink-0 items-center justify-center titlebar-no-drag"
+              className="null-tab null-tab-pinned relative flex h-7 w-7 flex-shrink-0 items-center justify-center titlebar-no-drag"
             >
               <div className="w-3.5 h-3.5 flex items-center justify-center">
                 {tab.isLoading ? (
                   <div className="w-3 h-3 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+                ) : isSettingsUrl(tab.url) ? (
+                  <Settings className="w-3.5 h-3.5 opacity-70" />
                 ) : tab.favicon ? (
                   <img
                     src={tab.favicon}
@@ -206,7 +209,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               }}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
               data-active={isActive}
-              className={`aero-tab aero-tab-regular group relative flex h-7 w-[160px] flex-shrink-0 cursor-pointer items-center gap-2 px-2.5 text-xs font-medium titlebar-no-drag ${
+              className={`null-tab null-tab-regular group relative flex h-7 w-[160px] flex-shrink-0 cursor-pointer items-center gap-2 px-2.5 text-xs font-medium titlebar-no-drag ${
                 isDragOver ? 'border-l-2 border-l-[var(--accent)] ring-1 ring-[var(--accent-subtle)]' : ''
               }`}
             >
@@ -214,6 +217,8 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               <div className="flex-shrink-0 flex items-center justify-center w-3.5 h-3.5">
                 {tab.isLoading ? (
                   <div className="w-3 h-3 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+                ) : isSettingsUrl(tab.url) ? (
+                  <Settings className="w-3.5 h-3.5 opacity-70" />
                 ) : tab.favicon ? (
                   <img
                     src={tab.favicon}
@@ -258,7 +263,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
                   onCloseTab(tab.id, e);
                 }}
                 title={`탭 닫기 (${shortcutLabel('⌘W', 'Ctrl+W')})`}
-                className="aero-tab-close flex items-center justify-center rounded-[var(--radius-sm)] p-0.5 titlebar-no-drag"
+                className="null-tab-close flex items-center justify-center rounded-[var(--radius-sm)] p-0.5 titlebar-no-drag"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -270,7 +275,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
         <button
           onClick={() => onNewTab()}
           title={`새 탭 열기 (${shortcutLabel('⌘T', 'Ctrl+T')})`}
-          className="aero-icon-button aero-newtab-button flex-shrink-0 titlebar-no-drag"
+          className="null-icon-button null-newtab-button flex-shrink-0 titlebar-no-drag"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
@@ -288,8 +293,8 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
       <div className="flex items-center pl-1.5 titlebar-no-drag flex-shrink-0">
         <button
           onClick={onToggleAside}
-          title="Aside 서랍 패널 토글 (번역/메모/다운로드)"
-          className={`aero-icon-button border transition-colors ${
+          title="서랍 패널 토글 (메모/다운로드)"
+          className={`null-icon-button border transition-colors ${
             isAsideOpen
               ? 'bg-[var(--accent-subtle)] text-[var(--accent)] border-[var(--accent-border)]'
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--chrome-surface-hover)] border-transparent'
@@ -302,7 +307,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
       {/* High-Density Tab Context Menu */}
       {contextMenu.visible && targetTab && (
         <div
-          className="aero-popover fixed z-50 py-1 w-44 text-xs text-[var(--text-primary)]"
+          className="null-popover fixed z-50 py-1 w-44 text-xs text-[var(--text-primary)]"
           style={{ top: Math.min(contextMenu.y, window.innerHeight - 300), left: Math.min(contextMenu.x, window.innerWidth - 190) }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -311,7 +316,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onReloadTab(targetTab.id);
               setContextMenu((p) => ({ ...p, visible: false }));
             }}
-            className="aero-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
+            className="null-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
           >
             <RotateCw className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <span>새로고침</span>
@@ -321,7 +326,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onDuplicateTab(targetTab.id);
               setContextMenu((p) => ({ ...p, visible: false }));
             }}
-            className="aero-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
+            className="null-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
           >
             <Copy className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <span>탭 복제</span>
@@ -331,7 +336,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onTogglePinTab(targetTab.id);
               setContextMenu((p) => ({ ...p, visible: false }));
             }}
-            className="aero-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
+            className="null-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
           >
             <Pin className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <span>{targetTab.isPinned ? '탭 고정 해제' : '탭 고정'}</span>
@@ -341,7 +346,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onToggleMuteTab(targetTab.id);
               setContextMenu((p) => ({ ...p, visible: false }));
             }}
-            className="aero-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
+            className="null-list-row w-full text-left px-3 py-1.5 flex items-center gap-2"
           >
             {targetTab.isMuted ? (
               <Volume2 className="w-3.5 h-3.5 text-[var(--text-muted)]" />
@@ -358,7 +363,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onCloseTab(targetTab.id);
               setContextMenu((p) => ({ ...p, visible: false }));
             }}
-            className="aero-list-row w-full text-left px-3 py-1.5 text-[var(--danger)] hover:!bg-[var(--danger-subtle)]"
+            className="null-list-row w-full text-left px-3 py-1.5 text-[var(--danger)] hover:!bg-[var(--danger-subtle)]"
           >
             탭 닫기
           </button>
@@ -367,7 +372,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onCloseOtherTabs(targetTab.id);
               setContextMenu((p) => ({ ...p, visible: false }));
             }}
-            className="aero-list-row w-full text-left px-3 py-1.5"
+            className="null-list-row w-full text-left px-3 py-1.5"
           >
             다른 탭 닫기
           </button>
@@ -376,7 +381,7 @@ export const HorizontalTabBar: React.FC<HorizontalTabBarProps> = ({
               onCloseTabsToRight(targetTab.id);
               setContextMenu((p) => ({ ...p, visible: false }));
             }}
-            className="aero-list-row w-full text-left px-3 py-1.5"
+            className="null-list-row w-full text-left px-3 py-1.5"
           >
             오른쪽 탭들 닫기
           </button>

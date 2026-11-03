@@ -1,7 +1,8 @@
-import { WebContentsView, WebContents, BrowserWindow, session, Menu, MenuItemConstructorOptions } from 'electron';
+import { WebContentsView, WebContents, BrowserWindow, session, Menu, MenuItem, MenuItemConstructorOptions } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { normalizeTranslationError, TRANSLATION_LIMITS, TranslationError } from './translation';
+import { ElectronChromeExtensions } from 'electron-chrome-extensions';
+import { internalPageTitle, isInternalPageUrl, normalizeSettingsUrl } from '../shared/internalPages';
 
 export interface ViewBounds {
   x: number;
@@ -19,6 +20,11 @@ export interface TabEntry {
   isLoading: boolean;
   isMuted: boolean;
   isIncognito: boolean;
+  workspaceId: string;
+  ready?: Promise<void>;
+  navigationSerial?: number;
+  deferredUrl?: string;
+  error?: { code: number; description: string; url: string } | null;
 }
 
 type TabLifecycle = 'active' | 'background' | 'crashed';
@@ -33,51 +39,50 @@ export class TabManager {
   private bounds: ViewBounds = { x: 0, y: 76, width: 1200, height: 800 };
   private isOverlayActive = false;
   private htmlFullscreenTabId: string | null = null;
-  private translationJobVersions: Map<string, number> = new Map();
   private popupAttempts: Map<string, number[]> = new Map();
+  private registeringExtensionTab = false;
+  private appliedBounds = new WeakMap<WebContentsView, ViewBounds>();
+  private appliedVisibility = new WeakMap<WebContentsView, boolean>();
+  private gestureStates = new WeakMap<WebContents, string>();
+  private lastTabStatus = new WeakMap<TabEntry, string>();
 
-  constructor(mainWindow: BrowserWindow, tabSession: Electron.Session = session.defaultSession) {
+  constructor(mainWindow: BrowserWindow, tabSession: Electron.Session = session.defaultSession, private readonly extensions?: ElectronChromeExtensions,
+    private readonly workspaceSession?: (workspaceId: string) => Electron.Session,
+    private readonly prepareExtensions?: (ses: Electron.Session) => Promise<ElectronChromeExtensions | undefined>) {
     this.mainWindow = mainWindow;
     this.tabSession = tabSession;
   }
 
   public setBounds(bounds: ViewBounds) {
-    this.bounds = {
+    const next = {
       x: Math.round(bounds.x),
       y: Math.round(bounds.y),
       width: Math.max(0, Math.round(bounds.width)),
       height: Math.max(0, Math.round(bounds.height)),
     };
-
+    if (Object.keys(next).every(key => next[key as keyof ViewBounds] === this.bounds[key as keyof ViewBounds])) return;
+    this.bounds = next;
     this.applyViewLayout();
   }
 
   public setOverlay(isOverlay: boolean) {
+    if (this.isOverlayActive === isOverlay) return;
     this.isOverlayActive = isOverlay;
     this.applyViewLayout();
   }
 
-  private invalidateTranslationJob(tabId: string) {
-    this.translationJobVersions.set(tabId, (this.translationJobVersions.get(tabId) || 0) + 1);
-  }
-
-  private beginTranslationJob(tabId: string): number {
-    this.invalidateTranslationJob(tabId);
-    return this.translationJobVersions.get(tabId)!;
-  }
-
-  private isCurrentTranslationJob(tabId: string, entry: TabEntry, jobId: number, url: string, wc: WebContents): boolean {
-    return this.translationJobVersions.get(tabId) === jobId && this.tabs.get(tabId) === entry && entry.url === url && !wc.isDestroyed();
-  }
-
   private isVirtualUrl(url?: string): boolean {
-    return !url || url === 'aero://newtab' || url === 'browser://newtab' || /^about:blank(?:[#?].*)?$/i.test(url);
+    return isInternalPageUrl(url);
   }
 
-  private isLoadableUrl(url: string): boolean {
+  private isLoadableUrl(url: string, ses = this.getActiveSession()): boolean {
     if (this.isVirtualUrl(url)) return true;
     try {
-      const protocol = new URL(url).protocol;
+      const parsed = new URL(url);
+      const protocol = parsed.protocol;
+      if (protocol === 'chrome-extension:') {
+        return Boolean(ses.extensions.getExtension(parsed.hostname));
+      }
       return protocol === 'http:' || protocol === 'https:' || protocol === 'file:';
     } catch {
       return false;
@@ -88,12 +93,13 @@ export class TabManager {
     return /^(mailto|tel|vscode|zoommtg):/i.test(url);
   }
 
-  public createTab(tabId: string, initialUrl: string = 'aero://newtab', isIncognito: boolean = false) {
+  public createTab(tabId: string, initialUrl: string = 'null://newtab', isIncognito: boolean = false, workspaceId = 'workspace-default', options?: { deferLoad?: boolean }) {
     if (!tabId || this.tabs.has(tabId)) {
       return;
     }
 
-    const safeInitialUrl = this.normalizeTabUrl(initialUrl);
+    const tabSession = this.workspaceSession?.(workspaceId) || this.tabSession;
+    const safeInitialUrl = this.normalizeTabUrl(initialUrl, tabSession);
 
     const view = new WebContentsView({
       webPreferences: {
@@ -102,12 +108,13 @@ export class TabManager {
         nodeIntegration: false,
         sandbox: true,
         spellcheck: true,
-        session: this.tabSession,
+        session: tabSession,
       },
     });
 
     view.setBackgroundColor('#13151a');
     view.setVisible(false);
+    this.appliedVisibility.set(view, false);
 
     try {
       this.mainWindow.contentView.addChildView(view);
@@ -120,28 +127,52 @@ export class TabManager {
     }
 
     const wc = view.webContents;
+    wc.on('dom-ready', () => this.notifyGestureState(wc, true));
 
     const entry: TabEntry = {
       view,
       url: safeInitialUrl,
-      title: this.isVirtualUrl(safeInitialUrl) ? '새 탭' : '로딩 중...',
+      title: this.isVirtualUrl(safeInitialUrl) ? internalPageTitle(safeInitialUrl) : '로딩 중...',
       canGoBack: false,
       canGoForward: false,
-      isLoading: !this.isVirtualUrl(safeInitialUrl),
+      isLoading: !this.isVirtualUrl(safeInitialUrl) && !options?.deferLoad,
       isMuted: false,
       isIncognito,
+      workspaceId,
     };
 
     this.tabs.set(tabId, entry);
+    const registerExtensions = (extensions?: ElectronChromeExtensions) => {
+      if (!extensions || wc.isDestroyed() || !this.tabs.has(tabId)) return;
+      // The bridge activates every newly observed tab. Registration is not a
+      // user selection: preserve background tabs and avoid notifying React
+      // before it has adopted an extension-created tab.
+      this.registeringExtensionTab = true;
+      try {
+        extensions.addTab(wc, this.mainWindow);
+        const active = this.activeTabId ? this.tabs.get(this.activeTabId) : undefined;
+        if (active?.view.webContents.session === wc.session) extensions.selectTab(active.view.webContents);
+      } finally {
+        this.registeringExtensionTab = false;
+      }
+    };
+    if (this.prepareExtensions) {
+      entry.ready = this.prepareExtensions(tabSession).then(registerExtensions).catch(error => {
+        console.error('[extensions] Workspace initialization failed:', error);
+      });
+    } else registerExtensions(this.extensions);
 
     // Lifecycle events
     wc.on('did-start-loading', () => {
-      this.invalidateTranslationJob(tabId);
+      if (this.isVirtualUrl(entry.url)) return;
+      entry.deferredUrl = undefined;
       entry.isLoading = true;
+      entry.error = null;
       this.notifyTabStatus(tabId);
     });
 
     wc.on('did-stop-loading', () => {
+      if (this.isVirtualUrl(entry.url)) return;
       entry.isLoading = false;
       entry.canGoBack = this.canGoBack(wc);
       entry.canGoForward = this.canGoForward(wc);
@@ -154,13 +185,13 @@ export class TabManager {
     });
 
     wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-      if (!isMainFrame || errorCode === -3) return;
-      this.invalidateTranslationJob(tabId);
+      if (!isMainFrame || errorCode === -3 || this.isVirtualUrl(entry.url)) return;
       entry.isLoading = false;
-      if (validatedURL && this.isLoadableUrl(validatedURL)) {
-        entry.url = this.normalizeTabUrl(validatedURL);
+      if (validatedURL && this.isLoadableUrl(validatedURL, wc.session)) {
+        entry.url = this.normalizeTabUrl(validatedURL, wc.session);
       }
       entry.title = `페이지를 불러오지 못했습니다: ${errorDescription}`;
+      entry.error = { code: errorCode, description: errorDescription || '알 수 없는 네트워크 오류', url: validatedURL || entry.url };
       this.sendToChrome('tab:status-updated', {
         id: tabId,
         url: entry.url,
@@ -168,16 +199,18 @@ export class TabManager {
         canGoBack: entry.canGoBack,
         canGoForward: entry.canGoForward,
         isLoading: false,
-        error: { code: errorCode, description: errorDescription || '알 수 없는 네트워크 오류', url: validatedURL || entry.url },
+        error: entry.error,
       });
     });
 
     wc.on('page-title-updated', (_e, title) => {
+      if (this.isVirtualUrl(entry.url)) return;
       entry.title = this.limitText(title, 500) || entry.title;
       this.notifyTabStatus(tabId);
     });
 
     wc.on('page-favicon-updated', (_e, favicons) => {
+      if (this.isVirtualUrl(entry.url)) return;
       if (favicons && favicons.length > 0) {
         this.sendToChrome('tab:status-updated', {
           id: tabId,
@@ -187,16 +220,17 @@ export class TabManager {
     });
 
     wc.on('did-navigate', (_e, url) => {
-      this.invalidateTranslationJob(tabId);
-      entry.url = this.normalizeTabUrl(url);
+      if (this.isVirtualUrl(entry.url)) return;
+      entry.error = null;
+      entry.url = this.normalizeTabUrl(url, wc.session);
       entry.canGoBack = this.canGoBack(wc);
       entry.canGoForward = this.canGoForward(wc);
       this.notifyTabStatus(tabId);
     });
 
     wc.on('did-navigate-in-page', (_e, url) => {
-      this.invalidateTranslationJob(tabId);
-      entry.url = this.normalizeTabUrl(url);
+      if (this.isVirtualUrl(entry.url)) return;
+      entry.url = this.normalizeTabUrl(url, wc.session);
       entry.canGoBack = this.canGoBack(wc);
       entry.canGoForward = this.canGoForward(wc);
       this.notifyTabStatus(tabId);
@@ -248,7 +282,7 @@ export class TabManager {
               autoHideMenuBar: true,
               backgroundColor: '#13151a',
               webPreferences: {
-                session: this.tabSession,
+                session: wc.session,
                 nodeIntegration: false,
                 contextIsolation: true,
                 sandbox: true,
@@ -285,7 +319,7 @@ export class TabManager {
         this.sendToChrome('tab:open-external', url);
         return;
       }
-      if (!this.isLoadableUrl(url)) event.preventDefault();
+      if (!this.isLoadableUrl(url, wc.session)) event.preventDefault();
     });
 
     wc.on('render-process-gone', (_event, details) => {
@@ -293,13 +327,14 @@ export class TabManager {
       if (!current || current !== entry || details.reason === 'clean-exit') return;
       current.isLoading = false;
       current.title = '페이지 렌더러가 종료되었습니다. 새로고침해 주세요.';
+      current.error = { code: -1, description: '페이지 렌더러가 종료되었습니다.', url: current.url };
       this.sendToChrome('tab:status-updated', {
         id: tabId,
         url: current.url,
         title: current.title,
         isLoading: false,
         lifecycle: 'crashed' as TabLifecycle,
-        error: { code: -1, description: '페이지 렌더러가 종료되었습니다.', url: current.url },
+        error: current.error,
       });
     });
 
@@ -320,9 +355,6 @@ export class TabManager {
       } else if (isCmd && input.shift && !input.alt && input.key.toLowerCase() === 'h') {
         event.preventDefault();
         this.sendToChrome('menu:open-library');
-      } else if (isCmd && !input.shift && !input.alt && input.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        this.sendToChrome('menu:open-command-palette');
       } else if (isCmd && !input.shift && !input.alt && input.key === ',') {
         event.preventDefault();
         this.sendToChrome('menu:open-settings');
@@ -362,9 +394,6 @@ export class TabManager {
       } else if (isCmd && !input.shift && !input.alt && input.key === '\\') {
         event.preventDefault();
         this.sendToChrome('menu:toggle-aside');
-      } else if (isCmd && input.alt && input.key.toLowerCase() === 't') {
-        event.preventDefault();
-        this.sendToChrome('tab:translate-active');
       } else if ((isCmd && input.alt && input.key.toLowerCase() === 'i') || input.key === 'F12') {
         event.preventDefault();
         this.toggleDevTools(tabId);
@@ -373,7 +402,9 @@ export class TabManager {
 
     // Context menu
     wc.on('context-menu', (_e, params) => {
-      const items: MenuItemConstructorOptions[] = [];
+      const items: Array<MenuItemConstructorOptions | MenuItem> = [];
+      const extensionItems = this.extensionsFor(wc)?.getContextMenuItems(wc, params) || [];
+      if (extensionItems.length > 0) items.push(...extensionItems, { type: 'separator' });
       const linkUrl = typeof params.linkURL === 'string' ? params.linkURL.trim() : '';
       if (this.isLoadableWebUrl(linkUrl)) {
         items.push(
@@ -396,28 +427,16 @@ export class TabManager {
           { type: 'separator' },
         );
       }
-      const selectedText = params.selectionText ? params.selectionText.trim() : '';
-      if (selectedText) {
-        const preview = selectedText.length > 25 ? selectedText.substring(0, 25) + '...' : selectedText;
-        items.push(
-          {
-            label: `한국어로 선택 번역: "${preview}"`,
-            click: () => this.sendToChrome('tab:selection-translate', selectedText),
-          },
-          { type: 'separator' }
-        );
-      }
-
       items.push(
         {
           label: '뒤로 가기',
           enabled: this.canGoBack(wc),
-          click: () => wc.goBack(),
+          click: () => this.goBack(tabId),
         },
         {
           label: '앞으로 가기',
           enabled: this.canGoForward(wc),
-          click: () => wc.goForward(),
+          click: () => this.goForward(tabId),
         },
         {
           label: '새로고침',
@@ -427,11 +446,6 @@ export class TabManager {
         { label: '복사', role: 'copy' },
         { label: '붙여넣기', role: 'paste' },
         { label: '모두 선택', role: 'selectAll' },
-        { type: 'separator' },
-        {
-          label: '한국어로 이 페이지 번역',
-          click: () => this.sendToChrome('tab:translate-active'),
-        },
         { type: 'separator' },
         {
           label: '검사 (Inspect Element)',
@@ -450,7 +464,8 @@ export class TabManager {
 
     // Load initial URL if not virtual
     if (!this.isVirtualUrl(safeInitialUrl)) {
-      wc.loadURL(safeInitialUrl).catch(() => {});
+      if (options?.deferLoad) entry.deferredUrl = safeInitialUrl;
+      else this.loadPage(entry, safeInitialUrl);
     }
   }
 
@@ -458,11 +473,9 @@ export class TabManager {
     const current = this.tabs.get(tabId);
     if (!current) return;
 
-    if (this.activeTabId && this.activeTabId !== tabId) {
-      this.invalidateTranslationJob(this.activeTabId);
-    }
-
     this.activeTabId = tabId;
+    this.loadDeferredPage(current);
+    this.extensionsFor(current.view.webContents)?.selectTab(current.view.webContents);
     this.applyViewLayout();
     if (!this.isOverlayActive && !this.isVirtualUrl(current.url) && !current.view.webContents.isDestroyed()) {
       try { current.view.webContents.focus(); } catch {}
@@ -473,9 +486,8 @@ export class TabManager {
     const entry = this.tabs.get(tabId);
     if (!entry) return;
 
-    this.invalidateTranslationJob(tabId);
     this.tabs.delete(tabId);
-    this.translationJobVersions.delete(tabId);
+    this.extensionsFor(entry.view.webContents)?.removeTab(entry.view.webContents);
     this.popupAttempts.delete(tabId);
     if (this.htmlFullscreenTabId === tabId) this.htmlFullscreenTabId = null;
     if (this.activeTabId === tabId) this.activeTabId = null;
@@ -504,6 +516,7 @@ export class TabManager {
       this.splitRatio = Math.min(0.8, Math.max(0.2, ratio));
     }
     this.splitSecondaryTabId = secondaryTabId!;
+    this.loadDeferredPage(secondary);
     this.applyViewLayout();
   }
 
@@ -521,13 +534,57 @@ export class TabManager {
     return false;
   }
 
+  public getTabId(contents: Electron.WebContents): string | undefined {
+    for (const [id, entry] of this.tabs) if (entry.view.webContents === contents) return id;
+    return undefined;
+  }
+
+  /** Only a visible, owned page may request history navigation. */
+  public getGuestGestureState(contents: WebContents) {
+    const id = this.getTabId(contents);
+    const entry = id ? this.tabs.get(id) : undefined;
+    if (!entry || contents.isDestroyed() || !entry.view.getVisible() || this.isVirtualUrl(entry.url)) return null;
+    return { id: id!, canGoBack: this.canGoBack(contents), canGoForward: this.canGoForward(contents) };
+  }
+
+  public getTabWebContents(tabId: string): Electron.WebContents | undefined {
+    return this.tabs.get(tabId)?.view.webContents;
+  }
+
+  public getActiveTabId(): string | null {
+    return this.activeTabId;
+  }
+
+  public isRegisteringExtensionTab(): boolean {
+    return this.registeringExtensionTab;
+  }
+
   public getSession(): Electron.Session {
     return this.tabSession;
   }
 
-  public getHttpOrigins(): string[] {
+  public getActiveSession(): Electron.Session {
+    return (this.activeTabId && this.tabs.get(this.activeTabId)?.view.webContents.session) || this.tabSession;
+  }
+
+  public getActiveWorkspaceId(): string {
+    return (this.activeTabId && this.tabs.get(this.activeTabId)?.workspaceId) || 'workspace-default';
+  }
+
+  public getWorkspaceId(contents: Electron.WebContents): string | undefined {
+    const id = this.getTabId(contents);
+    return id ? this.tabs.get(id)?.workspaceId : undefined;
+  }
+
+  private extensionsFor(contents: Electron.WebContents): ElectronChromeExtensions | undefined {
+    // Static lookup avoids retaining a separate runtime on every tab.
+    return this.prepareExtensions ? ElectronChromeExtensions.fromSession(contents.session) : this.extensions;
+  }
+
+  public getHttpOrigins(targetSession = this.getActiveSession()): string[] {
     const origins = new Set<string>();
     for (const entry of this.tabs.values()) {
+      if (entry.view.webContents.session !== targetSession) continue;
       try {
         const parsed = new URL(entry.url);
         if (parsed.protocol === 'http:' || parsed.protocol === 'https:') origins.add(parsed.origin);
@@ -539,24 +596,33 @@ export class TabManager {
   public navigateTab(tabId: string, url: string) {
     const entry = this.tabs.get(tabId);
     if (!entry) {
-      this.createTab(tabId, url, this.tabSession !== session.defaultSession);
+      this.createTab(tabId, url, !this.tabSession.isPersistent(), this.getActiveWorkspaceId());
       return;
     }
 
-    const safeUrl = this.normalizeTabUrl(url);
+    const safeUrl = this.normalizeTabUrl(url, entry.view.webContents.session);
     if (!safeUrl) return;
 
-    this.invalidateTranslationJob(tabId);
     entry.url = safeUrl;
+    entry.deferredUrl = undefined;
+    entry.navigationSerial = (entry.navigationSerial || 0) + 1;
+    entry.error = null;
 
     if (this.isVirtualUrl(safeUrl)) {
+      // A replaced document must not keep playing media/running JavaScript
+      // behind the internal New Tab/Settings UI. Don't allocate a renderer for
+      // a tab that has never loaded anything in the first place.
+      const wc = entry.view.webContents;
+      if (wc.getURL() && wc.getURL() !== 'about:blank') void wc.loadURL('about:blank').catch(() => {});
       entry.isLoading = false;
-      entry.title = '새 탭';
+      entry.title = internalPageTitle(safeUrl);
+      entry.canGoBack = false;
+      entry.canGoForward = false;
       this.notifyTabStatus(tabId);
     } else {
       entry.isLoading = true;
       this.notifyTabStatus(tabId);
-      entry.view.webContents.loadURL(safeUrl).catch(() => {});
+      this.loadPage(entry, safeUrl);
     }
     // Recompute both panes. Setting the active view to the full viewport here
     // used to make it overlap the secondary pane during split navigation.
@@ -565,27 +631,22 @@ export class TabManager {
 
   public goBack(tabId: string) {
     const entry = this.tabs.get(tabId);
-    if (entry && this.canGoBack(entry.view.webContents)) {
-      this.invalidateTranslationJob(tabId);
-      // Use the same WebContents navigation path as the page context menu.
-      // Keeping gesture, toolbar, and menu navigation on one path avoids a
-      // renderer transition difference that can appear as a brief flash.
-      entry.view.webContents.goBack();
+    if (entry && !this.isVirtualUrl(entry.url) && this.canGoBack(entry.view.webContents)) {
+      entry.view.webContents.navigationHistory.goBack();
     }
   }
 
   public goForward(tabId: string) {
     const entry = this.tabs.get(tabId);
-    if (entry && this.canGoForward(entry.view.webContents)) {
-      this.invalidateTranslationJob(tabId);
-      entry.view.webContents.goForward();
+    if (entry && !this.isVirtualUrl(entry.url) && this.canGoForward(entry.view.webContents)) {
+      entry.view.webContents.navigationHistory.goForward();
     }
   }
 
   public reload(tabId: string, ignoreCache: boolean = false) {
     const entry = this.tabs.get(tabId);
-    if (entry && !entry.view.webContents.isDestroyed()) {
-      this.invalidateTranslationJob(tabId);
+    if (entry && !this.isVirtualUrl(entry.url) && !entry.view.webContents.isDestroyed()) {
+      if (entry.deferredUrl) { this.loadDeferredPage(entry); return; }
       if (ignoreCache) {
         entry.view.webContents.reloadIgnoringCache();
       } else {
@@ -686,233 +747,14 @@ export class TabManager {
     }
   }
 
-  public async translatePage(tabId: string, translateBatchFn: (texts: string[]) => Promise<string[]>): Promise<boolean> {
-    const entry = this.tabs.get(tabId);
-    if (!entry) return false;
-
-    const wc = entry.view.webContents;
-    if (wc.isDestroyed() || this.isVirtualUrl(entry.url)) return false;
-    const translationUrl = entry.url;
-    const jobId = this.beginTranslationJob(tabId);
-    const startedAt = Date.now();
-
-    const clearTranslationState = async (restoreAppliedText: boolean) => {
-      if (wc.isDestroyed()) return;
-      await wc.executeJavaScript(`
-        (function(jobId, restoreAppliedText) {
-          var state = window.__aeroTranslationState;
-          if (!state || state.jobId !== jobId) return;
-          if (restoreAppliedText && Array.isArray(state.nodes)) {
-            state.nodes.forEach(function(item) {
-              try {
-                var expected = item.prefix + (item.translated || '') + item.suffix;
-                if (item.node && item.node.isConnected && item.translated && item.node.nodeValue === expected) {
-                  item.node.nodeValue = item.original;
-                }
-              } catch (e) {}
-            });
-          }
-          window.__aeroTranslationState = null;
-          window.__aeroTranslated = false;
-        })(${jobId}, ${restoreAppliedText})
-      `);
-    };
-
-    try {
-      const translationMode = await wc.executeJavaScript(`
-        (function(jobId) {
-          if (!window.__aeroTranslated) return 'translate';
-
-          var state = window.__aeroTranslationState;
-          if (state && Array.isArray(state.nodes)) {
-            state.nodes.forEach(function(item) {
-              try {
-                var expected = item.prefix + (item.translated || '') + item.suffix;
-                if (item.node && item.node.isConnected && item.translated && item.node.nodeValue === expected) {
-                  item.node.nodeValue = item.original;
-                }
-              } catch (e) {}
-            });
-          }
-          window.__aeroTranslationState = null;
-          window.__aeroTranslated = false;
-          return 'restore';
-        })(${jobId})
-      `);
-      if (translationMode === 'restore') {
-        return false;
-      }
-      if (!this.isCurrentTranslationJob(tabId, entry, jobId, translationUrl, wc)) {
-        await clearTranslationState(false);
-        return false;
-      }
-
-      const extractResult: string[] = await wc.executeJavaScript(`
-        (function() {
-          var blockedTags = new Set(['SCRIPT', 'STYLE', 'CODE', 'PRE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'SVG', 'CANVAS']);
-          var maxNodes = ${TRANSLATION_LIMITS.maxTranslatableNodes};
-          var maxTextChars = ${TRANSLATION_LIMITS.maxTextChars};
-          var nodes = [];
-          var texts = [];
-          var visibilityCache = new WeakMap();
-          function isVisible(parent, doc) {
-            if (visibilityCache.has(parent)) return visibilityCache.get(parent);
-            var style = (doc.defaultView || window).getComputedStyle(parent);
-            var visible = style.display !== 'none' && style.visibility !== 'hidden' && style.visibility !== 'collapse' && style.opacity !== '0';
-            visibilityCache.set(parent, visible);
-            return visible;
-          }
-          function collectDocument(doc) {
-            if (!doc || nodes.length >= maxNodes) return;
-            var walker = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT);
-            var node;
-
-            while ((node = walker.nextNode()) && nodes.length < maxNodes) {
-              var parent = node.parentElement;
-              if (!parent || blockedTags.has(parent.tagName) || parent.closest('script,style,code,pre,noscript,textarea,input,select,option,[contenteditable],[data-aero-ignore-translation]')) continue;
-              if (!isVisible(parent, doc)) continue;
-
-              var raw = node.nodeValue || '';
-              var text = raw.trim();
-              if (text.length < 2 || text.length > maxTextChars || !/[\\p{L}\\p{N}]/u.test(text)) continue;
-
-              var start = raw.indexOf(text);
-              nodes.push({
-                node: node,
-                original: raw,
-                prefix: start > 0 ? raw.slice(0, start) : '',
-                suffix: start >= 0 ? raw.slice(start + text.length) : '',
-                text: text,
-                translated: '',
-              });
-              texts.push(text);
-            }
-
-            if (nodes.length >= maxNodes) return;
-            Array.from(doc.querySelectorAll('iframe, frame')).forEach(function(frame) {
-              if (nodes.length >= maxNodes) return;
-              try {
-                if (frame.contentDocument) collectDocument(frame.contentDocument);
-              } catch (e) {}
-            });
-          }
-
-          collectDocument(document);
-
-          window.__aeroTranslationState = { jobId: ${jobId}, nodes: nodes, translated: false };
-          window.__aeroTranslated = false;
-          return texts;
-        })()
-      `);
-
-      if (!this.isCurrentTranslationJob(tabId, entry, jobId, translationUrl, wc)) {
-        await clearTranslationState(false);
-        return false;
-      }
-      if (!extractResult || extractResult.length === 0) {
-        await clearTranslationState(false);
-        return false;
-      }
-
-      const CHUNK_SIZE = TRANSLATION_LIMITS.maxTextsPerRequest;
-      const MAX_CONCURRENT_CHUNKS = TRANSLATION_LIMITS.maxConcurrentRequests;
-      const chunks: { start: number; texts: string[] }[] = [];
-      for (let start = 0; start < extractResult.length; start += CHUNK_SIZE) {
-        chunks.push({ start, texts: extractResult.slice(start, start + CHUNK_SIZE) });
-      }
-      const translatedTexts: string[] = new Array(extractResult.length);
-      for (let groupStart = 0; groupStart < chunks.length; groupStart += MAX_CONCURRENT_CHUNKS) {
-        if (!this.isCurrentTranslationJob(tabId, entry, jobId, translationUrl, wc)) {
-          await clearTranslationState(false);
-          return false;
-        }
-        const group = chunks.slice(groupStart, groupStart + MAX_CONCURRENT_CHUNKS);
-        const translatedGroup = await Promise.all(group.map(async (chunk) => {
-          const translated = await translateBatchFn(chunk.texts);
-          if (
-            !Array.isArray(translated) ||
-            translated.length !== chunk.texts.length ||
-            translated.some((value, index) => typeof value !== 'string' || (chunk.texts[index].trim() && !value.trim()))
-          ) {
-            throw new TranslationError('invalid_response', '온라인 번역 응답이 올바르지 않습니다.');
-          }
-          return translated;
-        }));
-
-        for (let i = 0; i < group.length; i++) {
-          const chunk = group[i];
-          for (let j = 0; j < chunk.texts.length; j++) translatedTexts[chunk.start + j] = translatedGroup[i][j];
-        }
-      }
-
-      if (!this.isCurrentTranslationJob(tabId, entry, jobId, translationUrl, wc)) {
-        await clearTranslationState(false);
-        return false;
-      }
-
-      const appliedCount = await wc.executeJavaScript(`
-        (function(jobId, translations) {
-          var state = window.__aeroTranslationState;
-          if (!state || state.jobId !== jobId || !Array.isArray(state.nodes)) return 0;
-          var applied = 0;
-          for (var i = 0; i < translations.length; i++) {
-            var item = state.nodes[i];
-            var translated = translations[i];
-            if (!item || !item.node || !item.node.isConnected || !translated || !translated.trim()) continue;
-            try {
-              // Do not overwrite text changed by the site while the request
-              // was in flight. This keeps SPA updates safe.
-              if (item.node.nodeValue !== item.original) continue;
-              item.node.nodeValue = item.prefix + translated + item.suffix;
-              item.translated = translated;
-              applied++;
-            } catch (e) {}
-          }
-          return applied;
-        })(${jobId}, ${JSON.stringify(translatedTexts)})
-      `);
-
-      if (!this.isCurrentTranslationJob(tabId, entry, jobId, translationUrl, wc)) {
-        await clearTranslationState(true);
-        return false;
-      }
-      if (!appliedCount) {
-        await clearTranslationState(false);
-        return false;
-      }
-
-      await wc.executeJavaScript(`
-        (function(jobId) {
-          var state = window.__aeroTranslationState;
-          if (state && state.jobId === jobId) {
-            state.translated = true;
-            window.__aeroTranslated = true;
-          }
-        })(${jobId})
-      `);
-      return true;
-    } catch (err) {
-      const normalized = normalizeTranslationError(err);
-      console.warn('[Translation]', {
-        provider: 'google-mobile-web',
-        code: normalized.code,
-        durationMs: Date.now() - startedAt,
-      });
-      try {
-        await clearTranslationState(true);
-      } catch {}
-      return false;
-    }
-  }
-
   public destroyAll() {
     const entries = Array.from(this.tabs.values());
     this.tabs.clear();
-    this.translationJobVersions.clear();
     this.activeTabId = null;
     this.splitSecondaryTabId = null;
     for (const entry of entries) {
       try {
+        this.extensionsFor(entry.view.webContents)?.removeTab(entry.view.webContents);
         entry.view.setVisible(false);
         this.mainWindow.contentView.removeChildView(entry.view);
         entry.view.webContents.close({ waitForBeforeUnload: false });
@@ -923,16 +765,30 @@ export class TabManager {
   private notifyTabStatus(tabId: string) {
     const entry = this.tabs.get(tabId);
     if (!entry || this.mainWindow.isDestroyed() || entry.view.webContents.isDestroyed()) return;
+    this.notifyGestureState(entry.view.webContents);
 
-    this.sendToChrome('tab:status-updated', {
+    const status = {
       id: tabId,
       url: entry.url,
       title: entry.title,
       canGoBack: entry.canGoBack,
       canGoForward: entry.canGoForward,
       isLoading: entry.isLoading,
-      error: null,
-    });
+      error: entry.error || null,
+    };
+    const signature = JSON.stringify(status);
+    if (this.lastTabStatus.get(entry) === signature) return;
+    this.lastTabStatus.set(entry, signature);
+    this.sendToChrome('tab:status-updated', status);
+  }
+
+  private notifyGestureState(contents: WebContents, force = false) {
+    if (contents.isDestroyed()) return;
+    const state = { canGoBack: this.canGoBack(contents), canGoForward: this.canGoForward(contents) };
+    const signature = `${state.canGoBack}:${state.canGoForward}`;
+    if (!force && this.gestureStates.get(contents) === signature) return;
+    this.gestureStates.set(contents, signature);
+    try { contents.send('tab:gesture-state', state); } catch {}
   }
 
   private applyViewLayout() {
@@ -954,17 +810,28 @@ export class TabManager {
     for (const [id, entry] of this.tabs) {
       try {
         if (!visibleIds.has(id) || this.isOverlayActive || this.isVirtualUrl(entry.url)) {
-          entry.view.setVisible(false);
+          if (this.appliedVisibility.get(entry.view) !== false) {
+            entry.view.setVisible(false);
+            this.appliedVisibility.set(entry.view, false);
+          }
           continue;
         }
         const isSecondary = split && id === this.splitSecondaryTabId;
-        entry.view.setBounds({
+        const nextBounds = {
           x: this.bounds.x + (isSecondary ? primaryWidth + gutter : 0),
           y: this.bounds.y,
           width: isSecondary ? this.bounds.width - primaryWidth - gutter : primaryWidth,
           height: this.bounds.height,
-        });
-        entry.view.setVisible(true);
+        };
+        const previous = this.appliedBounds.get(entry.view);
+        if (!previous || Object.keys(nextBounds).some(key => nextBounds[key as keyof ViewBounds] !== previous[key as keyof ViewBounds])) {
+          entry.view.setBounds(nextBounds);
+          this.appliedBounds.set(entry.view, nextBounds);
+        }
+        if (this.appliedVisibility.get(entry.view) !== true) {
+          entry.view.setVisible(true);
+          this.appliedVisibility.set(entry.view, true);
+        }
       } catch {}
     }
   }
@@ -976,16 +843,39 @@ export class TabManager {
     } catch {}
   }
 
-  private normalizeTabUrl(url: unknown): string {
-    if (typeof url !== 'string') return 'aero://newtab';
+  private normalizeTabUrl(url: unknown, ses = this.getActiveSession()): string {
+    if (typeof url !== 'string') return 'null://newtab';
     const trimmed = url.trim();
-    if (this.isVirtualUrl(trimmed)) return 'aero://newtab';
-    if (!this.isLoadableUrl(trimmed)) return 'aero://newtab';
+    const settingsRoute = normalizeSettingsUrl(trimmed);
+    if (settingsRoute) return settingsRoute;
+    if (this.isVirtualUrl(trimmed)) return 'null://newtab';
+    if (!this.isLoadableUrl(trimmed, ses)) return 'null://newtab';
     try {
       return new URL(trimmed).href;
     } catch {
-      return 'aero://newtab';
+      return 'null://newtab';
     }
+  }
+
+  private loadPage(entry: TabEntry, url: string) {
+    const serial = (entry.navigationSerial || 0) + 1;
+    entry.navigationSerial = serial;
+    const load = () => {
+      if (!entry.view.webContents.isDestroyed() && entry.navigationSerial === serial && entry.url === url) {
+        entry.view.webContents.loadURL(url).catch(() => {});
+      }
+    };
+    if (entry.ready) void entry.ready.then(load); else load();
+  }
+
+  private loadDeferredPage(entry: TabEntry) {
+    if (!entry.deferredUrl) return;
+    const url = entry.deferredUrl;
+    entry.deferredUrl = undefined;
+    entry.isLoading = true;
+    this.loadPage(entry, url);
+    const id = this.getTabId(entry.view.webContents);
+    if (id) this.notifyTabStatus(id);
   }
 
   private limitText(value: string, maxLength: number): string {

@@ -7,7 +7,7 @@ const path = require('path');
 // Compile only the real TabManager module. Requiring the bundled main entry
 // would also start the application, so the old test never exercised the
 // production manager and could report a false positive.
-const testRuntimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aero-tab-test-'));
+const testRuntimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'null-tab-test-'));
 const compiledManagerPath = path.join(testRuntimeDir, 'TabManager.cjs');
 const compiledGuestPreloadPath = path.join(testRuntimeDir, 'guestPreload.js');
 buildSync({

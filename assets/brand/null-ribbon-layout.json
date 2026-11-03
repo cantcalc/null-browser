@@ -1,0 +1,39 @@
+{
+  "sourceFile": "assets/brand/null-ribbon-source.png",
+  "sourceSha256": "1c0c642ffb0468abde2415e9cac1406af55c741076a75352d160e464d96542bf",
+  "originalDimensions": {
+    "width": 1536,
+    "height": 1024
+  },
+  "sourceBounds": {
+    "left": 392,
+    "top": 185,
+    "width": 751,
+    "height": 622
+  },
+  "crop": {
+    "left": 384,
+    "top": 177,
+    "width": 767,
+    "height": 638
+  },
+  "outputDimensions": {
+    "width": 1024,
+    "height": 1024
+  },
+  "outputBounds": {
+    "left": 175,
+    "top": 233,
+    "width": 674,
+    "height": 558
+  },
+  "margins": {
+    "left": 175,
+    "right": 175,
+    "top": 233,
+    "bottom": 233
+  },
+  "maxCenterErrorPx": 0,
+  "masterBytes": 244768,
+  "method": "Original user PNG; no generated/repainted ribbon pixels; uniform scale and frame placement only."
+}

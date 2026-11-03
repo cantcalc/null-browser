@@ -1,0 +1,41 @@
+{
+  "sourceFile": "assets/brand/null-logo-source.png",
+  "sourceSha256": "283938df094520906c12eee46ce11d8b5031973bf9ac363af787de5bb4d6743e",
+  "originalDimensions": {
+    "width": 1254,
+    "height": 1254
+  },
+  "sourceBounds": {
+    "left": 211,
+    "top": 199,
+    "width": 824,
+    "height": 832
+  },
+  "crop": {
+    "left": 211,
+    "top": 199,
+    "width": 824,
+    "height": 832
+  },
+  "matteEdgeInsetSourcePx": 2,
+  "transparentOutsideWhiteTile": true,
+  "outputDimensions": {
+    "width": 1024,
+    "height": 1024
+  },
+  "outputBounds": {
+    "left": 5,
+    "top": 0,
+    "width": 1014,
+    "height": 1024
+  },
+  "margins": {
+    "left": 5,
+    "right": 5,
+    "top": 0,
+    "bottom": 0
+  },
+  "maxCenterErrorPx": 0,
+  "masterBytes": 754386,
+  "method": "Crop to the white tile; inset its convex alpha boundary by two source pixels to exclude black-matted edges; preserve internal dark ribbon; trim transparent padding, uniformly scale and center."
+}
