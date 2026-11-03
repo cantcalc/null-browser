@@ -49,4 +49,6 @@ async function run(){
   const result={ok:true,platform:process.platform,arch:process.arch,version:expected,firstLaunch:true,homeLogo:true,nativePageLoad:true,exitAndRelaunch:true,settingsPersistence:true,isolatedProfile:true,profile};
   fs.mkdirSync('release',{recursive:true});fs.writeFileSync(`release/smoke-${process.platform}.json`,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
 }
-run().catch(e=>{console.error(e);console.error(output.slice(-4000));process.exitCode=1;}).finally(()=>{for(const ws of clients)ws.close();if(child?.exitCode===null)child.kill();fixture.close();});
+const cleanup=()=>{for(const ws of clients)ws.close();if(child?.exitCode===null)child.kill();fixture.close();};
+module.exports={launch,quit,profile,cleanup,getChild:()=>child};
+if(require.main===module)run().catch(e=>{console.error(e);console.error(output.slice(-4000));process.exitCode=1;}).finally(cleanup);

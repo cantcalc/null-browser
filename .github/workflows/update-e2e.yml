@@ -1,0 +1,35 @@
+name: Windows published update E2E
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  update:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run licenses
+      - name: Build older controlled QA installer (never publish)
+        run: npx electron-builder --win nsis --x64 --publish never -c.extraMetadata.version=1.0.0-beta.0 -c.directories.output=update-e2e-old
+      - name: Install older QA app and use the real public update feed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = (Get-ChildItem update-e2e-old/*.exe | Select-Object -First 1).FullName
+          $install = Join-Path $env:RUNNER_TEMP 'NULL-update-e2e'
+          $p = Start-Process -FilePath $setup -ArgumentList '/S',"/D=$install" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Older QA installation failed' }
+          node scripts/updater-e2e.cjs (Join-Path $install 'NULL.exe') --install
+          if ($LASTEXITCODE -ne 0) { throw 'Public-feed update E2E failed' }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: windows-update-e2e-result
+          path: release/update-e2e-win32.json
+          if-no-files-found: warn
