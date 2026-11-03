@@ -24,13 +24,13 @@ async function run(){
   qa.disconnect();
   await Promise.race([exited,delay(30000)]);assert.notEqual(old.exitCode,null,'Old application did not quit');
   const escaped=binary.replaceAll("'","''");
-  const getVersion=()=>execFileSync('powershell',['-NoProfile','-Command',`(Get-Item -LiteralPath '${escaped}').VersionInfo.ProductVersion`],{encoding:'utf8'}).trim();
-  await wait(()=>{try{return getVersion()===target;}catch{return false;}},'new EXE installed');result.install=true;
-  const processes=()=>JSON.parse(execFileSync('powershell',['-NoProfile','-Command',`ConvertTo-Json -InputObject @((Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '${escaped}' }) | Select-Object -ExpandProperty ProcessId) -Compress`],{encoding:'utf8'}).trim()||'[]');
+  const getVersion=()=>execFileSync('powershell',['-NoProfile','-Command',`(Get-Item -LiteralPath '${escaped}').VersionInfo.ProductVersion`],{encoding:'utf8',timeout:15000}).trim();
+  await wait(()=>{try{return getVersion().split('.').slice(0,3).join('.')===target.split('-')[0];}catch{return false;}},'new EXE installed');result.install=true;
+  const processes=()=>JSON.parse(execFileSync('powershell',['-NoProfile','-Command',`ConvertTo-Json -InputObject @((Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '${escaped}' }) | Select-Object -ExpandProperty ProcessId) -Compress`],{encoding:'utf8',timeout:15000}).trim()||'[]');
   await wait(()=>processes().length>0,'updated app automatically restarted');result.restarted=true;
   execFileSync('powershell',['-NoProfile','-Command',`Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '${escaped}' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`]);
   ({main,page}=await qa.launch());assert.equal(await main.evaluate("process.mainModule.require('electron').app.getVersion()"),target);
   assert(await page.evaluate("window.electronAPI.getSettings().then(s=>s.saveSearchHistory===false)"),'QA profile settings lost during update');result.versionAfterRestart=target;result.qaSettingsPreserved=true;
   await qa.quit(main);
 }
-run().then(()=>{result.ok=true;}).catch(e=>{result.ok=false;result.error=String(e);console.error(e);process.exitCode=1;}).finally(()=>{qa.cleanup();fs.mkdirSync('release',{recursive:true});fs.writeFileSync(`release/update-e2e-${process.platform}.json`,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));});
+run().then(()=>{result.ok=true;}).catch(e=>{result.ok=false;result.error=String(e);console.error(e);process.exitCode=1;}).finally(()=>{qa.cleanup();fs.mkdirSync('release',{recursive:true});fs.writeFileSync(`release/update-e2e-${process.platform}.json`,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));process.exit(process.exitCode||0);});
