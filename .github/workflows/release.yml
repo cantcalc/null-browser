@@ -1,10 +1,13 @@
-name: Build and release NULL
-on:
+name: Build and release NULL for macOS
+'on':
   push:
-    branches: [main]
-    tags: ['v*']
+    branches:
+      - main
+    tags:
+      - v*
   pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       publish:
@@ -20,22 +23,29 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
       - name: Scan complete Git history (including initial root commit)
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: |
+        run: >
           set -euo pipefail
+
           mkdir -p "$RUNNER_TEMP/gitleaks"
-          gh release download v8.30.1 --repo gitleaks/gitleaks --pattern gitleaks_8.30.1_linux_x64.tar.gz --pattern gitleaks_8.30.1_checksums.txt --dir "$RUNNER_TEMP/gitleaks"
+
+          gh release download v8.30.1 --repo gitleaks/gitleaks --pattern gitleaks_8.30.1_linux_x64.tar.gz --pattern
+          gitleaks_8.30.1_checksums.txt --dir "$RUNNER_TEMP/gitleaks"
+
           cd "$RUNNER_TEMP/gitleaks"
+
           sha256sum --check --ignore-missing gitleaks_8.30.1_checksums.txt
+
           tar -xzf gitleaks_8.30.1_linux_x64.tar.gz
+
           ./gitleaks git "$GITHUB_WORKSPACE" --redact --log-opts=--all
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
           cache: npm
@@ -59,9 +69,6 @@ jobs:
           - os: macos-15
             platform: darwin
             command: npm run dist:mac
-          - os: windows-2025
-            platform: win32
-            command: npm run dist:win
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -86,40 +93,11 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: ${{ matrix.command }}
-      - name: Package Windows (never publishes)
-        if: runner.os == 'Windows'
-        env:
-          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-        run: ${{ matrix.command }}
       - run: npm run verify:release -- ${{ matrix.platform }}
       - name: macOS packaged runtime smoke
         if: runner.os == 'macOS'
         run: node scripts/smoke-installed.cjs 'release/mac-arm64/NULL.app/Contents/MacOS/NULL'
-      - name: Windows install, runtime, restart, uninstall
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $setup = (Get-ChildItem release/NULL-Setup-*.exe | Select-Object -First 1).FullName
-          $install = Join-Path $env:RUNNER_TEMP 'NULL-install-qa'
-          $installer = Start-Process -FilePath $setup -ArgumentList '/S',"/D=$install" -Wait -PassThru
-          if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }
-          $exe = Join-Path $install 'NULL.exe'
-          if (!(Test-Path $exe)) { throw 'Installed executable missing' }
-          $signature = (Get-AuthenticodeSignature $exe).Status.ToString()
-          @{platform='win32'; authenticodeStatus=$signature; installed=$true} | ConvertTo-Json | Set-Content release/signing-status-win.json
-          node scripts/smoke-installed.cjs $exe
-          if ($LASTEXITCODE -ne 0) { throw 'Installed runtime smoke failed' }
-          $uninstaller = (Get-ChildItem $install/*ninstall*.exe | Select-Object -First 1).FullName
-          if (!$uninstaller) { throw 'Uninstaller missing' }
-          Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait
-          for ($i=0; $i -lt 30 -and (Test-Path $exe); $i++) { Start-Sleep -Seconds 1 }
-          if (Test-Path $exe) { throw 'Uninstall left the main executable' }
-          $smoke = Get-Content release/smoke-win32.json | ConvertFrom-Json
-          $smoke | Add-Member -NotePropertyName silentInstallAndUninstall -NotePropertyValue $true
-          $smoke | ConvertTo-Json | Set-Content release/smoke-win32.json
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-${{ matrix.platform }}
           if-no-files-found: error
@@ -137,7 +115,9 @@ jobs:
             release/smoke-*.json
   publish:
     if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish)
-    needs: [validate, packages]
+    needs:
+      - validate
+      - packages
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -146,7 +126,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: release-*
           path: release

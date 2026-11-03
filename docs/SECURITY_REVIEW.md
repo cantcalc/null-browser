@@ -1,5 +1,7 @@
 # 공개 배포 전 점검
 
+현재 배포 범위는 macOS ARM64입니다. Windows 관련 코드는 보존하지만 작업·배포는 보류했습니다.
+
 2026-11-03 · NULL 1.0.1-beta.3
 
 - 기존 Git 기록 18개 commit을 gitleaks로 검사: 탐지 0건. 새 commit 및 공개 대상 파일은 push 전에 추가 검사합니다.
