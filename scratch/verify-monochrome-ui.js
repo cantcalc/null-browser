@@ -214,6 +214,10 @@ async function privateQA(theme) {
   assert(!controls.workspace&&!controls.settings&&controls.privateLogo&&controls.barTop===0,'private controls are not minimal '+JSON.stringify(controls));
   if(controls.platform==='darwin') {
     assert(controls.tabLeft>=148,'private tab overlaps native traffic lights');
+    // Native menus follow the focused window; a background private window
+    // must not be judged against the normal window's still-active menu.
+    await main.evaluate(`process.mainModule.require('electron').app.focus({steal:true});${privateWin}.focus();true`);
+    await waitFor(()=>main.evaluate(`${privateWin}.isFocused()`),'private window focus before native menu assertion');
     assert(await main.evaluate("process.mainModule.require('electron').Menu.getApplicationMenu().getMenuItemById('null-preferences').enabled===false"),'private native preferences remain enabled');
   }
   await p.evaluate("window.dispatchEvent(new KeyboardEvent('keydown',{key:',',metaKey:true,bubbles:true}));true");
