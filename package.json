@@ -60,14 +60,6 @@
         "to": "licenses/THIRD_PARTY_NOTICES.txt"
       },
       {
-        "from": "node_modules/electron/dist/LICENSE",
-        "to": "licenses/LICENSE.electron.txt"
-      },
-      {
-        "from": "node_modules/electron/dist/LICENSES.chromium.html",
-        "to": "licenses/LICENSES.chromium.html"
-      },
-      {
         "from": "LICENSE",
         "to": "licenses/LICENSE.NULL.txt"
       }
@@ -110,7 +102,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "NULL"
     },
-    "artifactName": "NULL-${version}-${arch}.${ext}"
+    "artifactName": "NULL-${version}-${arch}.${ext}",
+    "afterPack": "scripts/after-pack.cjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
