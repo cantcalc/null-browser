@@ -1,3 +1,4 @@
+require('./signing-env.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');

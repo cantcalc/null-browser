@@ -1,6 +1,6 @@
 # NULL Browser
 
-워크스페이스별 로그인 환경과 단정한 인터페이스를 제공하는 Electron/Chromium 기반 데스크톱 브라우저입니다. 가벼운 사용 흐름을 목표로 개발 중이며, 현재 배포는 **1.0.1-beta.2 테스트 버전(Pre-release)**입니다.
+워크스페이스별 로그인 환경과 단정한 인터페이스를 제공하는 Electron/Chromium 기반 데스크톱 브라우저입니다. 가벼운 사용 흐름을 목표로 개발 중이며, 현재 배포는 **1.0.1-beta.3 테스트 버전(Pre-release)**입니다.
 
 [다운로드 · GitHub Releases](https://github.com/cantcalc/null-browser/releases) · [문제 제보](https://github.com/cantcalc/null-browser/issues)
 

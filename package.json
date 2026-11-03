@@ -1,6 +1,6 @@
 {
   "name": "null-browser",
-  "version": "1.0.1-beta.2",
+  "version": "1.0.1-beta.3",
   "description": "가벼운 사용 흐름과 워크스페이스별 세션을 갖춘 Chromium 기반 데스크톱 브라우저",
   "repository": {
     "type": "git",
@@ -29,8 +29,8 @@
     "start": "npm run build && electron .",
     "package:mac": "npm run build && npm run licenses && node scripts/package-mac.cjs --dir",
     "dist:mac": "npm run build && npm run licenses && node scripts/package-mac.cjs",
-    "package:win": "npm run build && npm run licenses && electron-builder --win --x64 --dir --publish never",
-    "dist:win": "npm run build && npm run licenses && electron-builder --win nsis --x64 --publish never",
+    "package:win": "npm run build && npm run licenses && node scripts/package-win.cjs --dir",
+    "dist:win": "npm run build && npm run licenses && node scripts/package-win.cjs",
     "licenses": "node scripts/generate-notices.cjs",
     "verify:release": "node scripts/verify-release.cjs"
   },
