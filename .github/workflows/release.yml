@@ -84,6 +84,7 @@ jobs:
           npm run test:tabs
           npm run test:core
           npm run test:runtime
+          npm run test:ai
       - name: Package macOS (never publishes)
         if: runner.os == 'macOS'
         env:
@@ -97,6 +98,11 @@ jobs:
       - name: macOS packaged runtime smoke
         if: runner.os == 'macOS'
         run: node scripts/smoke-installed.cjs 'release/mac-arm64/NULL.app/Contents/MacOS/NULL'
+      - name: AI packaged UI (LaunchServices, real OS vault, mock provider transport)
+        if: runner.os == 'macOS'
+        env:
+          NULL_AI_PACKAGED: 'true'
+        run: node scratch/verify-ai-ui.cjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-${{ matrix.platform }}

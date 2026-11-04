@@ -15,6 +15,9 @@ import { WorkspaceSessions } from './WorkspaceSessions';
 import { ElectronChromeExtensions, setSessionPartitionResolver } from 'electron-chrome-extensions';
 import { hasExtensionCaptureGrant } from './ExtensionCompatibility';
 import { PRODUCT_NAME, PROFILE_DIRECTORY, STORAGE_APPLICATION_NAME } from '../shared/brand';
+import type { AIService, AIHost } from './ai/AIService';
+import type { AICommand } from '../shared/ai';
+import { parseNavigationInput } from '../src/utils/navigationParser';
 
 // Product branding may change; the established profile/partitions must not.
 // Explicit QA/CLI profiles always win and never touch the user's real data.
@@ -47,6 +50,18 @@ const preparedSessions = new WeakSet<Electron.Session>();
 const workspaceSessions = new WorkspaceSessions(prepareSession, dataManager.getLegacySessionWorkspaceId());
 let pendingOpenUrl: string | null = null;
 let crashRecoveryPending = dataManager.didPreviousRunCrash();
+let aiService: AIService | undefined;
+let aiLoading: Promise<AIService> | undefined;
+function getAIService() {
+  return aiLoading ||= Promise.all([import('./ai/AIService'), import('./ai/Vault')]).then(([service, vault]) => {
+    aiService = new service.AIService(new vault.AIVault(path.join(app.getPath('userData'), 'null-ai-vault.json')));
+    return aiService;
+  });
+}
+function aiHost(win: BrowserWindow, workspaceId?: string): AIHost {
+  const manager = windowTabManagers.get(win)!;
+  return { win, manager, workspaceId: workspaceId || manager.getActiveWorkspaceId(), searchURL: query => parseNavigationInput(query, dataManager.getSettings()).url };
+}
 
 function isBrowserUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false;
@@ -135,6 +150,11 @@ function createWindow(options?: { isIncognito?: boolean; initialUrl?: string; wo
       return ElectronChromeExtensions.fromSession(target);
     });
   windowTabManagers.set(win, tabManager);
+  if (!isIncognito) tabManager.onAISelection = (tabId, text, intent, sourceURL) => {
+    const wc = tabManager.getTabWebContents(tabId);
+    if (!wc || wc.isDestroyed() || wc.getURL() !== sourceURL) return;
+    void getAIService().then(service => service.selection(aiHost(win, tabManager.getWorkspaceId(wc)), tabId, text, intent)).catch(() => {});
+  };
   updateManager.attachWindow(win);
 
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -206,6 +226,7 @@ function createWindow(options?: { isIncognito?: boolean; initialUrl?: string; wo
   });
 
   win.on('closed', () => {
+    aiService?.detach(win.id);
     const tm = windowTabManagers.get(win);
     if (tm) {
       tm.destroyAll();
@@ -504,6 +525,22 @@ function isNormalChromeSender(event: Electron.IpcMainEvent | Electron.IpcMainInv
   return Boolean(win && windowTabManagers.has(win) && win.webContents === event.sender &&
     event.senderFrame === event.sender.mainFrame && event.sender.session === session.defaultSession);
 }
+
+// Only the exact, top-level browser chrome gets the AI capability. Guests,
+// extension pages, private windows and chrome subframes cannot reach the vault.
+ipcMain.handle('ai:command', async (event, command: AICommand, expectedWorkspaceId?: string) => {
+  if (!isNormalChromeSender(event)) return { ok: false, error: '일반 브라우저 창에서만 AI를 사용할 수 있습니다.' };
+  const win = BrowserWindow.fromWebContents(event.sender)!;
+  const url = new URL(event.sender.getURL());
+  const isLocal = url.protocol === 'file:' && decodeURIComponent(url.pathname) === path.resolve(__dirname, '../dist/index.html');
+  const dev = process.env.NODE_ENV === 'development' && url.origin === new URL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173').origin && url.pathname === '/';
+  if (!isLocal && !dev) return { ok: false, error: '신뢰할 수 없는 AI 호출입니다.' };
+  const host = aiHost(win);
+  if (expectedWorkspaceId !== undefined && expectedWorkspaceId !== host.workspaceId) return { ok: false, error: '워크스페이스가 변경되었습니다. 다시 시도해 주세요.' };
+  try { return await (await getAIService()).command(host, command); }
+  catch { return { ok: false, error: 'AI 저장소 또는 서비스에 접근하지 못했습니다. 암호화 저장소 상태를 확인해 주세요.' }; }
+});
+app.on('before-quit', () => aiService?.dispose());
 
 ipcMain.handle('extensions:list', (event) => isNormalChromeSender(event) ? extensionManager.list() : []);
 ipcMain.handle('extensions:install', async (event) => {

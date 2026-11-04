@@ -1,0 +1,10 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const root = path.resolve(__dirname, '..');
+const app = path.join(root,'release/mac-arm64/NULL.app');
+if(process.platform !== 'darwin' || !fs.existsSync(app)) throw Error('먼저 macOS에서 npm run package:mac을 실행해 주세요.');
+const profile = path.join(root,'tmp/ai-preview-profile');
+fs.mkdirSync(profile,{recursive:true});
+execFileSync('open',['-n',app,'--args',`--user-data-dir=${profile}`],{stdio:'inherit'});
+console.log('NULL AI 미리보기를 별도 프로필로 열었습니다. 기존 설치본과 사용자 데이터는 유지합니다.');

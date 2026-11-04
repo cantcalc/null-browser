@@ -12,6 +12,7 @@ import {
   Bookmark as BookmarkIcon,
   Puzzle,
   Settings,
+  MessageSquare,
 } from 'lucide-react';
 import { SunglassesIcon } from './SunglassesIcon';
 import { isNewTabUrl, isSettingsUrl } from '../../shared/internalPages';
@@ -30,6 +31,8 @@ function compactAddress(value: string): string {
 }
 
 interface AddressBarProps {
+  isAIOpen?: boolean;
+  onToggleAI?: () => void;
   isIncognito?: boolean;
   onNewPrivateWindow: () => void;
   workspaceId?: string;
@@ -55,6 +58,8 @@ interface AddressBarProps {
 }
 
 export const AddressBar: React.FC<AddressBarProps> = ({
+  isAIOpen = false,
+  onToggleAI,
   isIncognito = false,
   onNewPrivateWindow,
   workspaceId = 'workspace-default',
@@ -265,6 +270,7 @@ export const AddressBar: React.FC<AddressBarProps> = ({
 
       {/* Right Action Tools (High Density Icons) */}
       <div className="null-toolbar-actions flex items-center gap-0.5 flex-shrink-0">
+        {!isIncognito && onToggleAI && <button type="button" className="null-icon-button" aria-label="NULL AI 열기" aria-pressed={isAIOpen} title="NULL AI" onClick={onToggleAI}><MessageSquare size={15} /></button>}
         <button type="button" onClick={onNewPrivateWindow}
           aria-label="새 시크릿 창" title={`새 시크릿 창 (${shortcutLabel('⌘⇧N', 'Ctrl+Shift+N')})`}
           className="null-icon-button null-private-button" data-private-window={isIncognito ? 'true' : 'false'}>

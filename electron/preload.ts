@@ -1,8 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { injectBrowserAction } from 'electron-chrome-extensions/browser-action';
 import { HistoryItem, SearchHistoryItem, BookmarkItem, ClosedTab, DownloadItemInfo, BrowserSettings, FavoriteItem, ClearDataOptions, Workspace, PermissionPrompt, UpdateStatus, InstalledExtension } from './types';
+import type { AICommand, AIResult, AIState } from '../shared/ai';
 
 export interface ElectronAPI {
+  aiCommand: (command: AICommand, workspaceId?: string) => Promise<AIResult>;
+  onAIState: (callback: (payload: { workspaceId: string; state: AIState }) => void) => () => void;
+  onAIDelta: (callback: (payload: { workspaceId: string; messageId: string; text: string }) => void) => () => void;
+  onAISelection: (callback: (payload: { workspaceId: string; token: string; prompt: string }) => void) => () => void;
+  onAITabCreated: (callback: (payload: { id: string; url: string; workspaceId: string; active: boolean }) => void) => () => void;
   minimizeWindow: () => void;
   maximizeWindow: () => void;
   closeWindow: () => void;
@@ -174,6 +180,23 @@ export interface ElectronAPI {
 }
 
 const electronAPI: ElectronAPI = {
+  aiCommand: (command, workspaceId) => ipcRenderer.invoke('ai:command', command, workspaceId),
+  onAIState: callback => {
+    const listener = (_event: unknown, payload: { workspaceId: string; state: AIState }) => callback(payload);
+    ipcRenderer.on('ai:state', listener); return () => ipcRenderer.removeListener('ai:state', listener);
+  },
+  onAIDelta: callback => {
+    const listener = (_event: unknown, payload: { workspaceId: string; messageId: string; text: string }) => callback(payload);
+    ipcRenderer.on('ai:delta', listener); return () => ipcRenderer.removeListener('ai:delta', listener);
+  },
+  onAISelection: callback => {
+    const listener = (_event: unknown, payload: { workspaceId: string; token: string; prompt: string }) => callback(payload);
+    ipcRenderer.on('ai:selection', listener); return () => ipcRenderer.removeListener('ai:selection', listener);
+  },
+  onAITabCreated: callback => {
+    const listener = (_event: unknown, payload: { id: string; url: string; workspaceId: string; active: boolean }) => callback(payload);
+    ipcRenderer.on('ai:tab-created', listener); return () => ipcRenderer.removeListener('ai:tab-created', listener);
+  },
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),

@@ -1,0 +1,522 @@
+{
+  "date": "2026-11-04",
+  "timezone": "Asia/Seoul",
+  "version": "1.1.0-beta.1",
+  "platform": "macOS arm64",
+  "native": {
+    "ok": true,
+    "checks": [
+      "URL/protocol/private-IP rejection and sensitive text redaction",
+      "free pricing parser excludes Priority/Batch paid models and later tables",
+      "provider-specific quota detection, no fallback for auth/network/server/credit/capacity",
+      "UTF-8/CRLF split-chunk streaming parser",
+      "mock Gemini model/image/SSE/function schema and thought-signature continuation",
+      "real WebContentsView extraction excludes values/hidden/editable/scripts/email and isolates control world",
+      "bounded JPEG screenshot with input/sensitive-text masks",
+      "login/password pages blocked for page/image analysis",
+      "important clicks require explicit approval; denial does not execute",
+      "real search-input fill/scroll; arbitrary script/unselected tab/private URL blocked",
+      "changed DOM fingerprint pauses instead of clicking a stale target",
+      "actual public React document navigation and Google search (no AI provider)",
+      "real async OS safeStorage roundtrip, ciphertext-only file, workspace isolation and key deletion",
+      "simulated unavailable OS encryption refuses storage; no plaintext fallback",
+      "mock official-format API model list/stream; paid selection rejected; no idle requests or persisted messages",
+      "mock quota fallback order; never paid; auth/overload stop without switching",
+      "mock tool roundtrip + real dedicated native tab, cancellation, duplicate prevention and cleanup",
+      "agent login pause and explicit resume after a manual page change",
+      "two independent agents, same-tab lock, max-two limit and individual stop",
+      "close/reopen service clears conversation but restores settings and encrypted connections"
+    ],
+    "liveBrowserNavigation": {
+      "ok": true
+    },
+    "liveAIResponses": false,
+    "providerTransport": "mock official schemas",
+    "realElectronViews": true,
+    "realAsyncOSKeyEncryption": true
+  },
+  "sourceUI": {
+    "ok": true,
+    "packaged": false,
+    "runtimeLaunch": "direct executable",
+    "layouts": [
+      {
+        "width": 800,
+        "height": 600,
+        "position": "right",
+        "chrome": {
+          "left": 440,
+          "right": 800,
+          "top": 121,
+          "bottom": 600,
+          "width": 360,
+          "height": 600,
+          "screenWidth": 800,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 440,
+          "height": 479
+        }
+      },
+      {
+        "width": 800,
+        "height": 600,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 600,
+          "width": 360,
+          "height": 600,
+          "screenWidth": 800,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 440,
+          "height": 479
+        }
+      },
+      {
+        "width": 1280,
+        "height": 720,
+        "position": "right",
+        "chrome": {
+          "left": 920,
+          "right": 1280,
+          "top": 121,
+          "bottom": 720,
+          "width": 360,
+          "height": 720,
+          "screenWidth": 1280,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 920,
+          "height": 599
+        }
+      },
+      {
+        "width": 1280,
+        "height": 720,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 720,
+          "width": 360,
+          "height": 720,
+          "screenWidth": 1280,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 920,
+          "height": 599
+        }
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "position": "right",
+        "chrome": {
+          "left": 1080,
+          "right": 1440,
+          "top": 121,
+          "bottom": 895,
+          "width": 360,
+          "height": 895,
+          "screenWidth": 1440,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 1080,
+          "height": 774
+        }
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 895,
+          "width": 360,
+          "height": 895,
+          "screenWidth": 1440,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 1080,
+          "height": 774
+        }
+      }
+    ],
+    "mockUIRoundtrip": {
+      "requests": 2,
+      "cancelled": 1,
+      "mockTransport": true,
+      "mockOSStorage": true
+    },
+    "vaultPersistence": {
+      "encryptedFile": true,
+      "mode": "0600",
+      "decryptedAfterRestart": true,
+      "realOSStorage": false
+    },
+    "privateBlocked": true,
+    "guestBridgeIsolated": true,
+    "restartPersistence": true,
+    "noStoredConversation": true,
+    "markdownSafe": true,
+    "liveAPIKeys": false
+  },
+  "packagedUI": {
+    "ok": true,
+    "packaged": true,
+    "runtimeLaunch": "macOS LaunchServices",
+    "layouts": [
+      {
+        "width": 800,
+        "height": 600,
+        "position": "right",
+        "chrome": {
+          "left": 440,
+          "right": 800,
+          "top": 121,
+          "bottom": 600,
+          "width": 360,
+          "height": 600,
+          "screenWidth": 800,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 440,
+          "height": 479
+        }
+      },
+      {
+        "width": 800,
+        "height": 600,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 600,
+          "width": 360,
+          "height": 600,
+          "screenWidth": 800,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 440,
+          "height": 479
+        }
+      },
+      {
+        "width": 1280,
+        "height": 720,
+        "position": "right",
+        "chrome": {
+          "left": 920,
+          "right": 1280,
+          "top": 121,
+          "bottom": 720,
+          "width": 360,
+          "height": 720,
+          "screenWidth": 1280,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 920,
+          "height": 599
+        }
+      },
+      {
+        "width": 1280,
+        "height": 720,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 720,
+          "width": 360,
+          "height": 720,
+          "screenWidth": 1280,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 920,
+          "height": 599
+        }
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "position": "right",
+        "chrome": {
+          "left": 1080,
+          "right": 1440,
+          "top": 121,
+          "bottom": 895,
+          "width": 360,
+          "height": 895,
+          "screenWidth": 1440,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 1080,
+          "height": 774
+        }
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 895,
+          "width": 360,
+          "height": 895,
+          "screenWidth": 1440,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 1080,
+          "height": 774
+        }
+      }
+    ],
+    "mockUIRoundtrip": {
+      "requests": 2,
+      "cancelled": 1,
+      "mockTransport": true,
+      "mockOSStorage": false
+    },
+    "vaultPersistence": {
+      "encryptedFile": true,
+      "mode": "0600",
+      "decryptedAfterRestart": true,
+      "realOSStorage": true
+    },
+    "privateBlocked": true,
+    "guestBridgeIsolated": true,
+    "restartPersistence": true,
+    "noStoredConversation": true,
+    "markdownSafe": true,
+    "liveAPIKeys": false,
+    "realPackagedKeychain": {
+      "ok": true,
+      "realOSStorage": true,
+      "encrypted": true,
+      "dummyCredential": true
+    }
+  },
+  "launchServicesKeychainDiagnosis": {
+    "date": "2026-11-04",
+    "launch": "macOS LaunchServices",
+    "isolatedProfile": true,
+    "realOSStorage": true,
+    "ok": true,
+    "encrypted": true,
+    "dummyCredential": true
+  },
+  "directExecutableKeychainObservation": {
+    "passed": false,
+    "error": "OS authorization denied in the owned directly spawned test process; normal LaunchServices launch passed.",
+    "rootCauseFullyProven": false
+  },
+  "liveProviderChecks": {
+    "date": "2026-11-04",
+    "validLiveAPIKeyAvailable": false,
+    "invalidKeyChecks": [
+      {
+        "provider": "gemini",
+        "rejected": true,
+        "kind": "auth",
+        "message": "API 키 또는 접근 권한을 확인해 주세요."
+      },
+      {
+        "provider": "groq",
+        "rejected": true,
+        "kind": "auth",
+        "message": "API 키 또는 접근 권한을 확인해 주세요."
+      },
+      {
+        "provider": "openrouter",
+        "rejected": true,
+        "kind": "auth",
+        "message": "API 키 또는 접근 권한을 확인해 주세요."
+      }
+    ],
+    "publicOpenRouterCatalog": {
+      "status": 200,
+      "total": 454,
+      "zeroPromptAndCompletion": 18
+    }
+  },
+  "packageIntegrity": {
+    "date": "2026-11-04",
+    "version": "1.1.0-beta.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "sourceFilesMatched": 14,
+    "asarSha256": "d647fc911505e9891b31466eff561b3a7805a9647be822b7e486bffeefddc6d2",
+    "iconMatches": true,
+    "updater": {
+      "provider": "github",
+      "owner": "cantcalc",
+      "repo": "null-browser"
+    },
+    "qaFixturesExcluded": true,
+    "strictSignatureIntegrity": true,
+    "developerIdSigned": false,
+    "localAdHocOnly": true,
+    "gatekeeperAccepted": false,
+    "notarized": false
+  },
+  "regressions": {
+    "navigation": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-navigation.log"
+    },
+    "tabs": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-tabs.log"
+    },
+    "core": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-core.log"
+    },
+    "runtime": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-runtime.log"
+    },
+    "lightweight": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-lightweight.log"
+    },
+    "workspaces": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-workspaces.log"
+    },
+    "extensions": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-extensions.log"
+    },
+    "settings": {
+      "status": "passed",
+      "log": "tmp/ai-qa/regression-settings.log"
+    }
+  },
+  "performance": {
+    "sourceUI": {
+      "beforeMiB": 433.4,
+      "afterMiB": 440.5,
+      "processesBefore": 4,
+      "processesAfter": 4
+    },
+    "packagedUI": {
+      "beforeMiB": 456.1,
+      "afterMiB": 462.9,
+      "processesBefore": 4,
+      "processesAfter": 4
+    },
+    "measurement": "single-run sum of process working sets before/after opening AI; shared pages may be counted twice",
+    "providerTransport": "mock",
+    "chromeComparison": false,
+    "longTermLeakTest": false
+  },
+  "security": {
+    "sourceSecretFindings": 0,
+    "gitHistorySecretFindings": 0,
+    "gitHistoryCommitsScanned": 30,
+    "productionAuditVulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "keychainACLChanged": false,
+    "plaintextFallback": false
+  },
+  "limitations": [
+    "No valid user API credential was supplied; successful live generation, actual quota fallback, live image understanding and natural-language external-site agent E2E remain unverified.",
+    "macOS Developer ID signing and notarization unavailable; ad-hoc integrity is not Gatekeeper acceptance.",
+    "Some existing extension-worker and temporary-profile shutdown/cache warnings remain.",
+    "Windows deferred by user."
+  ],
+  "distribution": {
+    "repository": "https://github.com/cantcalc/null-browser",
+    "visibility": "PUBLIC",
+    "newReleasePublished": false,
+    "newInstallerCreated": false,
+    "newVersionTagged": false,
+    "currentPublicRelease": "1.0.1-beta.3",
+    "installedDailyAppReplaced": false,
+    "readyForStableAIRelease": false
+  },
+  "localLogSHA256": {
+    "tmp/ai-qa/final-renderer-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/ai-qa/final-electron-types.log": "6b8f40974914c225dd7d90040e56d2733936b15062e883b5a021448fde6ac58b",
+    "tmp/ai-qa/package-mac.log": "ec4ee2371181edd6381ded93c00cbf39ff696887d8416d0366d67077f4864378",
+    "tmp/ai-qa/native.log": "35e760142851976ee3520653197094863ec12127cecd632ce874d062d925a295",
+    "tmp/ai-qa/ui-source.log": "16f543e187d479d00f4921768c36af4781ef4778a074ad223af673ecd22bd521",
+    "tmp/ai-qa/ui-packaged.log": "a5344a0aea8dcc2c3e154f244cba17b1ccbeda738609006acc8a6a74ab394cd0",
+    "tmp/ai-qa/secrets.log": "3d2014b047c917a391939060173a54ec9d05900e87799c61cb097a78dc59d27b",
+    "tmp/ai-qa/history-secrets.log": "89976b4fc28b4bdd90899c7a71c9d1a4b5327d3058a946f59aef2eacf2a28e29",
+    "tmp/ai-qa/regression-navigation.log": "d5a9afeecc90052fef0f6005252afef264ad7ccc99a3a1abca5a4d374e5a9eac",
+    "tmp/ai-qa/regression-tabs.log": "fd4cd2c42da4f650e89a1f78e0c9db0ba52e2a872f7baf0e5cbd38ee5f9a75cf",
+    "tmp/ai-qa/regression-core.log": "c29e77040412167454141b25363eced2cfb610ad030a149e9cf23ba0462899f1",
+    "tmp/ai-qa/regression-runtime.log": "50a7f6b8a1203cfd1640595fb6bc0c5bb11033d45ae4eeaab02fa81982701944",
+    "tmp/ai-qa/regression-lightweight.log": "9b8e84f8a00d7e2083e1e7be7e2213658618b59701bb7ea89cdb9b833c2e4d6f",
+    "tmp/ai-qa/regression-workspaces.log": "76871f8120439be4363c9416a219cc55dcd6469b3426ef9122dcba302711f6ac",
+    "tmp/ai-qa/regression-extensions.log": "44b0624f68415b41346046c98c6e9f1a9574550cc03f82c598af2d6a027ada2a",
+    "tmp/ai-qa/regression-settings.log": "293b61785e9fa3d7b624266be10774424a34345ca9dce29784203744f7999a4d"
+  }
+}

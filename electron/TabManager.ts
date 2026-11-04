@@ -30,6 +30,7 @@ export interface TabEntry {
 type TabLifecycle = 'active' | 'background' | 'crashed';
 
 export class TabManager {
+  public onAISelection?: (tabId: string, text: string, intent: string, sourceURL: string) => void;
   private mainWindow: BrowserWindow;
   private tabSession: Electron.Session;
   private tabs: Map<string, TabEntry> = new Map();
@@ -403,6 +404,16 @@ export class TabManager {
     // Context menu
     wc.on('context-menu', (_e, params) => {
       const items: Array<MenuItemConstructorOptions | MenuItem> = [];
+      const selectionURL = wc.getURL();
+      if (this.onAISelection && !isIncognito && !params.isEditable && params.selectionText?.trim() && this.isLoadableWebUrl(wc.getURL())) {
+        for (const [label, intent] of [
+          ['AI에게 질문하기', '선택한 내용에 대해 질문하고 싶어요.'],
+          ['선택한 내용 설명', '선택한 내용을 설명해 줘.'],
+          ['선택한 내용 요약', '선택한 내용을 요약해 줘.'],
+          ['선택한 내용 번역', '선택한 내용을 한국어로 번역해 줘.'],
+        ]) items.push({ label, click: () => this.onAISelection?.(tabId, params.selectionText, intent, selectionURL) });
+        items.push({ type: 'separator' });
+      }
       const extensionItems = this.extensionsFor(wc)?.getContextMenuItems(wc, params) || [];
       if (extensionItems.length > 0) items.push(...extensionItems, { type: 'separator' });
       const linkUrl = typeof params.linkURL === 'string' ? params.linkURL.trim() : '';
@@ -549,6 +560,22 @@ export class TabManager {
 
   public getTabWebContents(tabId: string): Electron.WebContents | undefined {
     return this.tabs.get(tabId)?.view.webContents;
+  }
+
+  /** Explicit AI access wakes only a user-selected/task tab, never all tabs. */
+  public async prepareTabForAI(tabId: string, signal?: AbortSignal): Promise<Electron.WebContents> {
+    signal?.throwIfAborted();
+    const entry = this.tabs.get(tabId);
+    if (!entry || entry.isIncognito || !entry.view.webContents.session.isPersistent()) throw Error('분석할 일반 탭이 없습니다.');
+    await entry.ready;
+    signal?.throwIfAborted();
+    if (entry.view.webContents.isDestroyed()) throw Error('탭이 닫혔습니다.');
+    this.loadDeferredPage(entry);
+    if (!entry.view.getVisible()) {
+      const bounds = { x: 0, y: 0, width: Math.max(320, this.bounds.width), height: Math.max(240, this.bounds.height) };
+      entry.view.setBounds(bounds); this.appliedBounds.set(entry.view, bounds);
+    }
+    return entry.view.webContents;
   }
 
   public getActiveTabId(): string | null {

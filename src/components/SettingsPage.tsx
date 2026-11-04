@@ -27,8 +27,10 @@ import { THEME_OPTIONS, INTERFACE_STYLES, HOME_STYLES } from '../constants/appea
 import type { InstalledExtension, UpdateStatus } from '../../electron/types';
 
 import type { SettingsSection } from '../../shared/internalPages';
+const AISettings = React.lazy(() => import('./ai/AISettings'));
 
 const SECTION_ITEMS = [
+  { id: 'ai', label: 'NULL AI', description: '내 API 키로 페이지 분석과 AI 에이전트를 사용하세요.', icon: SettingsIcon, group: '환경설정' },
   { id: 'general', label: '일반', description: 'NULL을 기본 브라우저로 설정하고 시작 페이지를 선택하세요.', icon: SettingsIcon, group: '브라우저' },
   { id: 'appearance', label: '모양 및 새 탭', description: '매일 보는 NULL의 색상과 새 탭 화면을 바꿔보세요.', icon: Palette, group: '브라우저' },
   { id: 'search', label: '검색 엔진', description: '주소창과 새 탭에서 사용할 기본 검색 엔진을 선택하세요.', icon: Search, group: '브라우저' },
@@ -44,6 +46,7 @@ const SECTION_ITEMS = [
 const SECTION_GROUPS = ['브라우저', '개인정보', '환경설정', 'NULL'] as const;
 
 interface SettingsPageProps {
+  workspaceId?: string;
   isOpen: boolean;
   settings: BrowserSettings;
   initialTab?: SettingsSection;
@@ -58,6 +61,7 @@ interface SettingsPageProps {
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({
+  workspaceId = 'workspace-default',
   isOpen,
   settings,
   initialTab = 'general',
@@ -434,6 +438,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </header>
         <div className="null-settings-scroll" ref={contentRef}>
           <div className="null-settings-content">
+              {activeTab === 'ai' && <React.Suspense fallback={<p>AI 설정을 불러오는 중…</p>}><AISettings key={workspaceId} workspaceId={workspaceId} /></React.Suspense>}
               {activeTab === 'general' && (
                 <section className="null-settings-section" data-settings-section="general" aria-labelledby="settings-page-heading">
                   {/* Default Browser Banner */}

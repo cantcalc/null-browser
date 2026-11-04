@@ -1,6 +1,6 @@
 export const SETTINGS_SECTIONS = [
   'general', 'appearance', 'search', 'privacy', 'sites', 'languages',
-  'downloads', 'extensions', 'shortcuts', 'backup', 'about',
+  'downloads', 'extensions', 'shortcuts', 'backup', 'about', 'ai',
 ] as const;
 
 export type SettingsSection = typeof SETTINGS_SECTIONS[number];

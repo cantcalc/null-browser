@@ -1,0 +1,20 @@
+{
+  "reviewedAt": "2026-11-04T00:00:00+09:00",
+  "expiresAt": "2026-11-11T00:00:00+09:00",
+  "purpose": "Short-lived conservative fallback when official documentation rejects automated HTTP requests. Always intersect with the authenticated live model API. Never use after expiry. Live explicit prices override this file.",
+  "sources": [
+    "https://aistudio.google.com/docs/pricing",
+    "https://aistudio.google.com/docs/models/gemini-3.8-flash",
+    "https://console.groq.com/docs/rate-limits",
+    "https://console.groq.com/docs/tool-use/overview",
+    "https://console.groq.com/docs/vision"
+  ],
+  "gemini": {
+    "gemini-3.8-flash": { "image": true, "tools": true }
+  },
+  "groq": {
+    "openai/gpt-oss-20b": { "image": false, "tools": true },
+    "openai/gpt-oss-120b": { "image": false, "tools": true },
+    "qwen/qwen3.8-27b": { "image": true, "tools": true }
+  }
+}

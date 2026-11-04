@@ -4,6 +4,8 @@
 
 현재 공개 배포는 **macOS Apple Silicon용 1.0.1-beta.3 Pre-release**입니다. Windows 배포·검증은 사용자의 요청으로 보류했습니다.
 
+현재 소스 개발 버전은 **1.1.0-beta.1 — NULL AI 실험판**입니다. 아래 기존 다운로드에는 AI가 포함되지 않습니다. AI 개발판은 유효한 실제 API 키 검증이 남아 있어 새 Release로 공개하지 않았습니다. [AI 사용·보안·제약](docs/AI_INTEGRATION.md), [구현/검증 보고서](docs/AI_IMPLEMENTATION_REPORT_2026-11-04.md)를 확인하세요.
+
 [GitHub Releases](https://github.com/cantcalc/null-browser/releases/tag/v1.0.1-beta.3) · [문제 제보](https://github.com/cantcalc/null-browser/issues) · [검증 보고서](docs/RELEASE_VERIFICATION_1.0.1-beta.3.md)
 
 ## 다운로드와 설치
@@ -27,7 +29,15 @@
 - 비영구 세션의 시크릿 창.
 - Chrome 웹 스토어 설치 연결과 일부 확장 API 보완.
 
-내장 AI, 커맨드 팔레트, 브라우저 내장 번역·광고차단, 검색 추천은 제공하지 않습니다. 번역/광고차단 확장과 내장 기능은 별개입니다.
+공개 1.0.1 배포본은 내장 AI를 제공하지 않습니다. 개발 소스 1.1에는 BYOK AI 사이드바·페이지 참조·에이전트를 추가했습니다. 커맨드 팔레트, 기존 내장 번역·광고차단, 검색 추천은 복구하지 않았습니다. AI 선택 텍스트 번역과 확장 프로그램의 번역/광고차단은 별개입니다.
+
+## NULL AI 개발판
+
+Gemini / Groq / OpenRouter 키를 워크스페이스별로 연결하고, 확인된 무료 모델로 스트리밍 대화·페이지/선택 텍스트 분석·캡처 전송·제한된 브라우저 에이전트를 사용할 수 있도록 구현했습니다. 기본 비활성화이며 페이지 데이터/제공자 변경 전송에는 동의가 필요합니다. 키는 메인 프로세스의 비동기 OS 암호화 저장소를 사용하고 원본을 renderer/웹사이트/확장에 반환하지 않습니다.
+
+대화는 메모리에만 유지하고 종료 시 삭제합니다. 에이전트의 중요하거나 불확실한 작업은 개별 승인하고 로그인/비밀번호/결제/파일 업로드는 직접 처리합니다. 일반/시크릿 및 워크스페이스 저장소 정책을 유지합니다.
+
+**실제 유효 API 키의 AI 답변은 아직 미검증입니다.** 모의 API와 실제 브라우저 조작/암호화/UI 검사를 구분해 기록했습니다. 맥 패키지를 일반 앱 실행 방식(LaunchServices)으로 열어 실제 OS 암호화·재시작 후 키 복원을 확인했습니다. 테스트 도구의 실행 파일 직접 실행에서는 키체인 거부가 재현되어 실행 환경 차이를 기록했습니다. 안정판 완성을 뜻하지 않으며 무료 계정 과금 상태·모델 가용성·외부 제공자의 데이터 보관도 보장하지 않습니다.
 
 ## UI와 테마
 
@@ -102,6 +112,8 @@ npm run test:interactions
 npm run test:lightweight
 npm run test:workspaces
 npm run test:extensions
+npm run test:ai
+npm run test:ai:ui
 ```
 
 네이티브 검사는 데스크톱 세션이 필요하고 격리된 QA 프로필을 사용합니다. QA의 디버깅 포트를 제품 기본 실행이나 개인 프로필에 추가하지 않습니다.

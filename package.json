@@ -1,6 +1,6 @@
 {
   "name": "null-browser",
-  "version": "1.0.1-beta.3",
+  "version": "1.1.0-beta.1",
   "description": "가벼운 사용 흐름과 워크스페이스별 세션을 갖춘 Chromium 기반 데스크톱 브라우저",
   "repository": {
     "type": "git",
@@ -32,7 +32,9 @@
     "package:win": "npm run build && npm run licenses && node scripts/package-win.cjs --dir",
     "dist:win": "npm run build && npm run licenses && node scripts/package-win.cjs",
     "licenses": "node scripts/generate-notices.cjs",
-    "verify:release": "node scripts/verify-release.cjs"
+    "verify:release": "node scripts/verify-release.cjs",
+    "test:ai": "node scripts/run-ai-tests.cjs",
+    "test:ai:ui": "npm run build && node scratch/verify-ai-ui.cjs"
   },
   "build": {
     "appId": "com.aero.browser",
@@ -113,6 +115,7 @@
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "tailwind-merge": "^3.0.1"
   },
   "overrides": {

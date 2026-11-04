@@ -15,6 +15,7 @@ import { NavigationResult, parseNavigationInput } from './utils/navigationParser
 import { PermissionPrompt } from './components/PermissionPrompt';
 import { BrowserErrorView } from './components/BrowserErrorView';
 import { LibraryModal } from './components/LibraryModal';
+const AISidebar = React.lazy(() => import('./components/ai/AISidebar'));
 
 const DEFAULT_SETTINGS: BrowserSettings = {
   interfaceStyle: 'studio',
@@ -198,6 +199,9 @@ export const App: React.FC = () => {
 
   // 7. Utility panel and browser dialogs
   const [isAsideOpen, setIsAsideOpen] = useState(false);
+  const [isAIOpen, setIsAIOpen] = useState(false);
+  const [aiMounted, setAIMounted] = useState(false);
+  const [aiSelection, setAISelection] = useState<{ token: string; prompt: string; revision: number } | null>(null);
   const [isSiteInfoOpen, setIsSiteInfoOpen] = useState(false);
   const [settingsSiteOrigin, setSettingsSiteOrigin] = useState<string | null>(null);
   const selectedSiteOrigin = getSiteOrigin(tabs.find(tab => tab.id === activeTabId)?.url);
@@ -1050,6 +1054,14 @@ export const App: React.FC = () => {
       if (data.active && data.workspaceId && data.workspaceId !== activeWorkspaceIdRef.current) handleSelectWorkspace(data.workspaceId);
       handleNewTab(data.url, { select: data.active, id: data.id, workspaceId: data.workspaceId });
     });
+    const aiCreated = api.onAITabCreated((data) => {
+      handleNewTab(data.url, { select: false, id: data.id, workspaceId: data.workspaceId });
+    });
+    const aiSelectedText = api.onAISelection((data) => {
+      if (data.workspaceId !== activeWorkspaceIdRef.current) return;
+      setAIMounted(true); setIsAIOpen(true); setIsAsideOpen(false); setIsSiteInfoOpen(false);
+      setAISelection({ token: data.token, prompt: data.prompt, revision: Date.now() });
+    });
     const selected = api.onExtensionTabSelected((id) => {
       const tab = tabsRef.current.find((item) => item.id === id);
       if (!tab) return;
@@ -1057,7 +1069,7 @@ export const App: React.FC = () => {
       handleSelectTab(id);
     });
     const closed = api.onExtensionTabClosed((id) => handleCloseTab(id));
-    return () => { created(); selected(); closed(); };
+    return () => { created(); selected(); closed(); aiCreated(); aiSelectedText(); };
   }, [isIncognito, handleNewTab, handleSelectWorkspace, handleSelectTab, handleCloseTab]);
 
   // Save session on tab changes (disabled in incognito)
@@ -1589,6 +1601,8 @@ export const App: React.FC = () => {
 
       {/* 3. Omnibox Toolbar with Site controls and zoom */}
       <AddressBar
+        isAIOpen={isAIOpen}
+        onToggleAI={() => { setAIMounted(true); setIsAIOpen(value => !value); setIsAsideOpen(false); setIsSiteInfoOpen(false); }}
         isIncognito={isIncognito}
         onNewPrivateWindow={() => window.electronAPI?.newPrivateWindow()}
         workspaceId={activeWorkspaceId}
@@ -1598,7 +1612,7 @@ export const App: React.FC = () => {
         isBookmarked={Boolean(activeTab?.url && bookmarks.some((bookmark) => bookmark.url === activeTab.url))}
         isAsideOpen={isAsideOpen}
         isSiteInfoOpen={isSiteInfoOpen}
-        onToggleSiteInfo={() => { setIsAsideOpen(false); setIsSiteInfoOpen(open => !open); }}
+        onToggleSiteInfo={() => { setIsAIOpen(false); setIsAsideOpen(false); setIsSiteInfoOpen(open => !open); }}
         zoomLevel={zoomLevel}
         onNavigate={handleNavigate}
         onSearchExecuted={handleSearchExecuted}
@@ -1664,6 +1678,7 @@ export const App: React.FC = () => {
         <div className="flex-1 min-w-0 relative overflow-hidden bg-[var(--chrome-bg)]">
       {/* Built-in settings page; native views are hidden for this internal URL. */}
       {!isIncognito && <SettingsPage
+        workspaceId={activeWorkspaceId}
         isOpen={isSettingsPage && !isHtmlFullscreen}
         initialTab={settingsSectionFromUrl(activeTab?.url)}
         initialSiteOrigin={settingsSiteOrigin}
@@ -1724,7 +1739,7 @@ export const App: React.FC = () => {
               ref={webviewContainerRef}
               tabs={workspaceTabs}
               activeTabId={activeTabId}
-              layoutKey={`${isSiteInfoOpen}:${isAsideOpen}:${isFindOpen}:${settings.showBookmarkBar}:${isHtmlFullscreen}:${settings.interfaceStyle}`}
+              layoutKey={`${isSiteInfoOpen}:${isAsideOpen}:${isAIOpen}:${isFindOpen}:${settings.showBookmarkBar}:${isHtmlFullscreen}:${settings.interfaceStyle}`}
               onUpdateTab={handleUpdateTab}
               onNewTab={handleNewTab}
               onSelectTab={handleSelectTab}
@@ -1756,6 +1771,7 @@ export const App: React.FC = () => {
             onZoomOut={() => handleChangeZoom(-0.1)} onResetZoom={handleResetZoom} />
         )}
         {/* Utility panel (Notes, Downloads) */}
+        {!isIncognito && aiMounted && !isHtmlFullscreen && <React.Suspense fallback={null}><AISidebar key={activeWorkspaceId} workspaceId={activeWorkspaceId} tabs={workspaceTabs} activeTabId={activeTabId} open={isAIOpen} onClose={() => setIsAIOpen(false)} onSettings={() => { setIsAIOpen(false); handleOpenSettings('ai'); }} onShowTab={handleSelectTab} selection={aiSelection} /></React.Suspense>}
         <AsidePanel
           isOpen={isAsideOpen}
           activeTab={activeTab}

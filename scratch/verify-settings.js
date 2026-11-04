@@ -230,8 +230,8 @@ async function verifyRemovedFeatures() {
     results.selectionTranslationRemoved = true;
     // Exercise the actual native context-menu event in this owned process.
     const labels=await main.evaluate(`(()=>{const Menu=process.mainModule.require('electron').Menu;const original=Menu.buildFromTemplate;let labels=[];try{Menu.buildFromTemplate=(items)=>{labels=items.map(item=>item.label||'');return {popup(){}}};(${guest}).emit('context-menu',{}, {x:10,y:10,selectionText:'Hello world',linkURL:${JSON.stringify(origin)}})}finally{Menu.buildFromTemplate=original}return labels})()`);
-    assert(!labels.some(label=>/번역/.test(label))&&labels.includes('새 탭에서 링크 열기'),'context menu removal/basic actions incorrect');
-    results.nativeContextMenuPreservedWithoutTranslation = true;
+    assert(!labels.some(label=>/^(페이지 번역|원문 보기|번역 설정)$/.test(label))&&labels.includes('새 탭에서 링크 열기')&&labels.includes('AI에게 질문하기')&&labels.includes('선택한 내용 번역'),'context menu basic actions/opt-in AI selection incorrect');
+    results.nativeContextMenuPreservedWithOptInAISelection = true;
     await screenshot('clean-toolbar-feature-removal');
     await verifySitePolish(origin,guest);
   } finally { fixture.closeAllConnections();await new Promise(resolve=>fixture.close(resolve)); }
@@ -241,13 +241,13 @@ async function run() {
   await page.evaluate(`document.querySelector('button[aria-label="브라우저 설정"]').click(); true`);
   await waitFor(() => page.evaluate(`!!document.querySelector('[data-settings-page]')`), 'settings tab');
   assert(await page.evaluate(`document.querySelector('input[aria-label="검색 또는 URL"]').value==='null://settings'`), 'not an internal settings tab');
-  assert(await page.evaluate(`document.querySelectorAll('[data-settings-nav]').length===11`), 'missing category');
+  assert(await page.evaluate(`document.querySelectorAll('[data-settings-nav]').length===12`), 'missing category');
   assert(await page.evaluate(`!document.querySelector('.null-settings-page input[type="search"]') && !document.querySelector('.null-overlay')`), 'settings is still a search/modal overlay');
   const initialCount = await page.evaluate(`document.querySelectorAll('[data-tab-id]').length`);
   await page.evaluate(`document.querySelector('button[aria-label="브라우저 설정"]').click(); true`);
   assert(await page.evaluate(`document.querySelectorAll('[data-tab-id]').length===${initialCount}`), 'duplicate settings tab');
   results.settingsTabAndDirectEntry = true;
-  const sections = ['general','appearance','search','privacy','sites','languages','downloads','extensions','shortcuts','backup','about'];
+  const sections = ['general','appearance','search','privacy','sites','languages','downloads','extensions','shortcuts','backup','about','ai'];
   for (const id of sections) { await category(id); await checkLayout(); }
   results.allCategories = true;
   await category('privacy');

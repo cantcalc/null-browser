@@ -1,0 +1,272 @@
+import { app, BrowserWindow, session, safeStorage, nativeImage } from 'electron';
+import assert from 'node:assert/strict';
+import { promises as fs, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { createServer } from 'node:http';
+import { AIProviders, sse, type Transport } from '../electron/ai/Providers';
+import { AIVault } from '../electron/ai/Vault';
+import { AIService, type AIHost } from '../electron/ai/AIService';
+import { PageContext } from '../electron/ai/PageContext';
+import { AgentTools } from '../electron/ai/AgentTools';
+import { TabManager } from '../electron/TabManager';
+import { classifyProviderError, geminiFreeCatalog, groqFreeCatalog, isAgentURL, redact } from '../electron/ai/Policy';
+import { modelKey, type AIState } from '../shared/ai';
+
+const root = process.cwd(), profile = mkdtempSync(join(tmpdir(), 'null-ai-native-'));
+app.setPath('userData', profile); app.setName('NULL AI QA');
+app.on('window-all-closed', event => event.preventDefault());
+const checks: string[] = [], windows: BrowserWindow[] = [];
+const check = (name: string) => { checks.push(name); console.log('PASS', name); };
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+async function wait<T>(value: () => T | Promise<T>, label: string): Promise<NonNullable<T>> { for (let i = 0; i < 200; i++) { const result = await value(); if (result) return result as NonNullable<T>; await delay(25); } throw Error('Timeout: ' + label); }
+const response = (data: any, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers });
+function streaming(events: any[], signal?: AbortSignal, hold = false) {
+  return new Response(new ReadableStream({ start(controller) {
+    for (const event of events) controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+    if (!hold) controller.close(); else signal?.addEventListener('abort', () => controller.error(Error('aborted')), { once: true });
+  } }), { headers: { 'content-type': 'text/event-stream' } });
+}
+let fixtureOrigin = '', manager: TabManager, service: AIService | undefined;
+let liveBrowserNavigation: { ok: boolean; issue?: string } = { ok: false };
+const server = createServer((request, res) => {
+  res.setHeader('content-type', 'text/html; charset=utf-8');
+  if (request.url === '/login') { res.end('<input type="password" value="never-read-credential"><p>Login</p>'); return; }
+  res.end(`<!doctype html><html><head><title>AI owned fixture</title></head><body><main><h1>Visible document</h1><p>Explain this code and summarize this article.</p><p>private@example.com</p><input name="q" type="search" value="input-value-must-not-leak"><input autocomplete="one-time-code" type="text" value="secret-code"><textarea>hidden-textarea-value</textarea><p hidden>hidden-secret</p><div contenteditable="true">editable-secret</div><script>const scriptSecret='script-secret';</script><a href="https://example.com">Read more</a><button id="send" onclick="this.dataset.executed='yes'">Send message</button><button id="toggle" onclick="document.body.dataset.clicked='yes'">Toggle details</button></main><div style="height:3000px">More content</div></body></html>`);
+});
+async function run() {
+  assert.equal(isAgentURL('file:///etc/passwd'), false); assert.equal(isAgentURL('http://0x7f000001/'), false); assert.equal(isAgentURL('https://user:pass@example.com/'), false);
+  assert.equal(isAgentURL('http://192.168.1.1/'), false); assert.equal(isAgentURL('https://example.com/'), true);
+  assert(!redact('Bearer abcd private@example.com password=secret').includes('secret'));
+  assert(!redact('ghp_' + 'a'.repeat(36)).includes('ghp_')); assert(!redact('010-1234-5678').includes('1234'));
+  check('URL/protocol/private-IP rejection and sensitive text redaction');
+  const md = (id: string, free: boolean) => `## ${id} {% id="${id}" %}\n{% tab title="Standard" %}\n* Input price\n* ${free ? 'Free of charge' : 'Not available'}\n* $1\n* Output price\n* ${free ? 'Free of charge' : 'Not available'}\n{% /tab %}\n{% tab title="Priority" %}\n* Input price\n* Free of charge\n* Output price\n* Free of charge\n{% /tab %}\n`;
+  assert.deepEqual([...geminiFreeCatalog(md('gemini-free', true) + md('gemini-paid', false))], ['gemini-free']);
+  assert.deepEqual([...groqFreeCatalog('Free Plan Limits<table><tbody><tr><td><code>model-free</code></td><td>30</td></tr></tbody></table><table><tbody><tr><td>paid</td></tr></tbody></table>')], ['model-free']);
+  check('free pricing parser excludes Priority/Batch paid models and later tables');
+  for (const provider of ['gemini', 'groq', 'openrouter'] as const) {
+    for (const status of [401, 403, 402, 500, 503]) assert.notEqual(classifyProviderError(provider, status, { error: { message: 'quota requests' } }, new Headers()).kind, 'quota');
+    assert.notEqual(classifyProviderError(provider, 429, { error: { message: 'overloaded capacity' } }, new Headers()).kind, 'quota');
+  }
+  assert.equal(classifyProviderError('gemini', 429, { error: { status: 'RESOURCE_EXHAUSTED', details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric: 'generate_content_free_tier_requests' }] }] } }, new Headers()).kind, 'quota');
+  assert.equal(classifyProviderError('groq', 429, { error: { code: 'rate_limit_exceeded', message: 'Rate limit reached for tokens per day' } }, new Headers()).kind, 'quota');
+  assert.equal(classifyProviderError('openrouter', 429, { error: { message: 'free-models daily request limit', metadata: { limit_source: 'free_model_daily_requests' } } }, new Headers()).kind, 'quota');
+  check('provider-specific quota detection, no fallback for auth/network/server/credit/capacity');
+  const encoded = new TextEncoder().encode('data: {"text":"한글"}\r\n\r\ndata: [DONE]\r\n\r\n');
+  const chunks = new ReadableStream({ start(c) { for (let i = 0; i < encoded.length; i += 3) c.enqueue(encoded.slice(i, i + 3)); c.close(); } });
+  const parsed = []; for await (const e of sse(new Response(chunks))) parsed.push(e);
+  assert.deepEqual(parsed, [{ text: '한글' }]); check('UTF-8/CRLF split-chunk streaming parser');
+  let geminiRequest: any;
+  const gemini = new AIProviders(async (url, init) => {
+    const address = String(url);
+    if (address.includes('/v1beta/models?')) return response({ models: [{ name: 'models/gemini-free', displayName: 'Fixture Gemini', supportedGenerationMethods: ['generateContent'], inputTokenLimit: 32000 }] });
+    if (address.endsWith('/docs/pricing')) return new Response(md('gemini-free', true));
+    if (address.includes('/docs/models/')) return new Response('**Inputs** Text, Image\n**Function calling**\n{% badge type="supported" /%}');
+    assert(address.includes(':streamGenerateContent?alt=sse'));
+    assert(!address.includes('key=')); assert(init?.headers && (init.headers as any)['x-goog-api-key']);
+    geminiRequest = JSON.parse(String(init?.body));
+    return streaming([{ candidates: [{ content: { parts: [{ text: 'Gemini text' }, { functionCall: { id: 'g1', name: 'read_page', args: {} }, thoughtSignature: 'test-thought-signature' }] } }] }]);
+  });
+  const gm = (await gemini.models('gemini', 'dummy-key-for-fixture', true, new AbortController().signal))[0];
+  assert(gm.free && gm.image && gm.tools);
+  const gResponse = await gemini.complete(gm, 'dummy-key-for-fixture', [{ role: 'system', content: 'Trusted instruction' }, { role: 'user', content: 'Explain image', image: 'data:image/jpeg;base64,AA==' }], [{ name: 'read_page', description: 'Read', parameters: { type: 'object', properties: {}, additionalProperties: false } }], new AbortController().signal, () => {});
+  assert.equal(gResponse.text, 'Gemini text'); assert.equal(gResponse.calls[0].signature, 'test-thought-signature');
+  assert(geminiRequest.tools[0].functionDeclarations[0].parametersJsonSchema); assert(geminiRequest.contents[0].parts[1].inlineData);
+  await gemini.complete(gm, 'dummy-key-for-fixture', [{ role: 'user', content: 'Read' }, { role: 'assistant', content: '', calls: gResponse.calls }, { role: 'tool', content: 'Untrusted observation', callId: 'g1', toolName: 'read_page' }], [], new AbortController().signal, () => {});
+  assert.equal(geminiRequest.contents[1].parts[0].thoughtSignature, 'test-thought-signature');
+  check('mock Gemini model/image/SSE/function schema and thought-signature continuation');
+
+  await app.whenReady();
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  fixtureOrigin = `http://127.0.0.1:${(server.address() as any).port}`;
+  const win = new BrowserWindow({ show: false, width: 1200, height: 850, webPreferences: { sandbox: true, contextIsolation: true } }); windows.push(win);
+  await win.loadURL('about:blank');
+  const sessions = new Map<string, Electron.Session>();
+  manager = new TabManager(win, session.defaultSession, undefined, id => { if (!sessions.has(id)) sessions.set(id, session.fromPartition('persist:ai-qa-' + id)); return sessions.get(id)!; });
+  manager.createTab('test-current', fixtureOrigin, false, 'workspace-default'); manager.switchTab('test-current');
+  manager.setBounds({ x: 0, y: 0, width: 1200, height: 800 });
+  const contents = manager.getTabWebContents('test-current')!;
+  await wait(() => contents.getTitle() === 'AI owned fixture' && !contents.isLoading(), 'native page');
+  const pages = new PageContext(), snapshot = await pages.snapshot(contents);
+  const external = JSON.stringify(pages.external(snapshot));
+  for (const secret of ['input-value-must-not-leak', 'secret-code', 'hidden-textarea-value', 'hidden-secret', 'editable-secret', 'script-secret', 'private@example.com']) assert(!external.includes(secret), 'Sensitive content leaked');
+  assert(external.includes('Visible document')); assert(snapshot.elements.length > 0);
+  assert.equal(await contents.executeJavaScript('typeof window.__nullAIContext'), 'undefined');
+  check('real WebContentsView extraction excludes values/hidden/editable/scripts/email and isolates control world');
+  win.show(); await delay(500); contents.invalidate(); await delay(150);
+  const screenshot = await pages.screenshot(contents); assert(screenshot.dataURL.startsWith('data:image/jpeg;base64,')); assert(screenshot.dataURL.length < 1_400_000);
+  const decoded = nativeImage.createFromDataURL(screenshot.dataURL), size = decoded.getSize(), pixels = decoded.toBitmap();
+  const box = screenshot.snapshot.masks[0];
+  const px = Math.floor((box.x + box.width / 2) * size.width / screenshot.snapshot.viewport.width), py = Math.floor((box.y + box.height / 2) * size.height / screenshot.snapshot.viewport.height);
+  const offset = (py * size.width + px) * 4;
+  assert([pixels[offset], pixels[offset + 1], pixels[offset + 2]].every(channel => Math.abs(channel - 36) <= 8), 'Input mask not present in captured pixels');
+  win.hide();
+  check('bounded JPEG screenshot with input/sensitive-text masks');
+  await contents.loadURL(fixtureOrigin + '/login');
+  assert((await pages.snapshot(contents)).sensitive); await assert.rejects(() => pages.screenshot(contents));
+  await contents.loadURL(fixtureOrigin);
+  check('login/password pages blocked for page/image analysis');
+  let approvals = 0, allow = false, pauses = 0;
+  const env = { userRequest: 'React useEffect', targetId: 'test-current', allowed: new Set(['test-current']), signal: new AbortController().signal, contents: (id: string) => { assert.equal(id, 'test-current'); return contents; }, searchURL: (query: string) => 'https://example.com/?q=' + encodeURIComponent(query), approve: async () => { approvals++; return allow; }, pause: async () => { pauses++; }, progress: () => {} };
+  const tools = new AgentTools(pages, env);
+  await tools.run({ id: 'read', name: 'read_page', arguments: {} });
+  let current = await pages.snapshot(contents); // Refresh tool's own observation below.
+  await tools.run({ id: 'read2', name: 'read_page', arguments: {} });
+  const buttonId = await pages.operation(contents, 'snapshot').then((s: any) => s.elements.find((e: any) => e.label === 'Send message').id);
+  // Snapshot IDs are scoped to the latest read; obtain them from the tool result.
+  const observation = JSON.parse(await tools.run({ id: 'read3', name: 'read_page', arguments: {} }));
+  const sendId = observation.headingsAndControls.find((e: any) => e.label === 'Send message').id;
+  const denied = await tools.run({ id: 'click', name: 'click', arguments: { elementId: sendId } });
+  assert(denied.includes('거부')); assert.equal(await contents.executeJavaScript("document.querySelector('#send').dataset.executed"), undefined); assert.equal(approvals, 1);
+  await tools.run({ id: 'click-denied-repeat', name: 'click', arguments: { elementId: sendId } }); assert.equal(approvals, 1);
+  allow = true;
+  const approvedTools = new AgentTools(pages, env);
+  const approvedObservation = JSON.parse(await approvedTools.run({ id: 'new-task-read', name: 'read_page', arguments: {} }));
+  const approvedId = approvedObservation.headingsAndControls.find((e: any) => e.label === 'Send message').id;
+  await approvedTools.run({ id: 'click2', name: 'click', arguments: { elementId: approvedId } });
+  assert.equal(await contents.executeJavaScript("document.querySelector('#send').dataset.executed"), 'yes');
+  check('important clicks require explicit approval; denial does not execute');
+  const after = JSON.parse(await tools.run({ id: 'read4', name: 'read_page', arguments: {} }));
+  const searchId = after.headingsAndControls.find((e: any) => e.inputType === 'search').id;
+  await tools.run({ id: 'type', name: 'type_text', arguments: { elementId: searchId, text: 'React useEffect' } });
+  assert.equal(await contents.executeJavaScript('document.querySelector("input[name=q]").value'), 'React useEffect');
+  const editorObservation = JSON.parse(await tools.run({ id: 'editor-read', name: 'read_page', arguments: {} }));
+  const editorId = editorObservation.headingsAndControls.find((e: any) => e.inputType === 'textarea').id;
+  const approvalsBeforeEditor = approvals;
+  await tools.run({ id: 'type-editor', name: 'type_text', arguments: { elementId: editorId, text: 'Public test draft' } });
+  assert.equal(await contents.executeJavaScript('document.querySelector("textarea").value'), 'Public test draft');
+  assert.equal(approvals, approvalsBeforeEditor + 1);
+  await tools.run({ id: 'scroll', name: 'scroll', arguments: { pixels: 600 } });
+  assert(await contents.executeJavaScript('scrollY>0'));
+  await assert.rejects(() => tools.run({ id: 'bad', name: 'execute_javascript', arguments: { code: 'alert(1)' } }));
+  await assert.rejects(() => tools.run({ id: 'other', name: 'read_page', arguments: { tabId: 'not-selected' } }));
+  await assert.rejects(() => tools.run({ id: 'private-url', name: 'navigate', arguments: { url: 'http://127.0.0.1/' } }));
+  check('real search-input fill/scroll; arbitrary script/unselected tab/private URL blocked');
+  const staleObservation = JSON.parse(await tools.run({ id: 'stale-read', name: 'read_page', arguments: {} }));
+  const staleId = staleObservation.headingsAndControls.find((e: any) => e.label === 'Toggle details').id;
+  await contents.executeJavaScript("document.querySelector('#toggle').textContent='Changed by user';true");
+  await tools.run({ id: 'stale-click', name: 'click', arguments: { elementId: staleId } });
+  assert.equal(await contents.executeJavaScript('document.body.dataset.clicked'), undefined); assert(pauses > 0);
+  check('changed DOM fingerprint pauses instead of clicking a stale target');
+  try {
+    const publicTools = new AgentTools(pages, { ...env, userRequest: 'https://react.dev/reference/react/useEffect React useEffect', searchURL: query => 'https://www.google.com/search?q=' + encodeURIComponent(query), pause: async () => { throw Error('External site requires manual login/challenge'); } });
+    const document = await publicTools.run({ id: 'live-doc', name: 'navigate', arguments: { url: 'https://react.dev/reference/react/useEffect' } });
+    assert(document.includes('useEffect'));
+    await publicTools.run({ id: 'live-search', name: 'search', arguments: { query: 'React useEffect' } });
+    assert.equal(new URL(contents.getURL()).hostname, 'www.google.com');
+    liveBrowserNavigation = { ok: true }; check('actual public React document navigation and Google search (no AI provider)');
+  } catch { liveBrowserNavigation = { ok: false, issue: 'Public website networking, authentication or challenge prevented verification.' }; console.log('UNVERIFIED public browser navigation'); }
+  await contents.loadURL(fixtureOrigin);
+
+  const filename = join(profile, 'vault.json'), vault = new AIVault(filename);
+  const dummyKey = 'qa-key-not-a-real-credential-123456789';
+  assert(await safeStorage.isAsyncEncryptionAvailable(), 'OS encrypted storage unavailable: do not substitute plaintext');
+  await vault.saveKey('workspace-default', 'groq', dummyKey, true);
+  assert.equal(await vault.key('workspace-default', 'groq'), dummyKey);
+  assert(!(await fs.readFile(filename, 'utf8')).includes(dummyKey));
+  await assert.rejects(() => vault.key('other-workspace', 'groq'));
+  await vault.removeKey('workspace-default', 'groq'); await assert.rejects(() => vault.key('workspace-default', 'groq'));
+  check('real async OS safeStorage roundtrip, ciphertext-only file, workspace isolation and key deletion');
+  const originalAvailability = safeStorage.isAsyncEncryptionAvailable;
+  try { safeStorage.isAsyncEncryptionAvailable = async () => false; await assert.rejects(() => vault.saveKey('workspace-blocked', 'groq', dummyKey, true)); }
+  finally { safeStorage.isAsyncEncryptionAvailable = originalAvailability; }
+  assert.equal((await vault.profile('workspace-blocked')).keys, undefined);
+  check('simulated unavailable OS encryption refuses storage; no plaintext fallback');
+
+  let generation = 'chat', requests: any[] = [], fail: 'none' | 'quota' | 'auth' | 'capacity' = 'none';
+  const transport: Transport = async (url, init) => {
+    const address = String(url); assert.equal(init?.redirect, 'error'); assert.equal(init?.credentials, 'omit');
+    if (address.endsWith('/key')) return response({ data: { is_free_tier: true } });
+    if (address.includes('docs/rate-limits')) return new Response('Free Plan Limits<table><tbody><tr><td>qa-model</td><td>30</td></tr></tbody></table>');
+    if (address.includes('tool-use')) return new Response('<table><tr><td>qa-model</td><td>Yes ✅</td></tr></table>');
+    if (address.includes('/models')) {
+      if (address.includes('groq.com')) return response({ data: [{ id: 'qa-model', active: true, context_window: 32000 }] });
+      return response({ data: [{ id: 'qa-free:free', name: 'QA free', pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] }, supported_parameters: ['tools'] }, { id: 'qa-paid', pricing: { prompt: '1', completion: '1' }, architecture: { output_modalities: ['text'] } }] });
+    }
+    assert(address === 'https://api.groq.com/openai/v1/chat/completions' || address === 'https://openrouter.ai/api/v1/chat/completions');
+    const body = JSON.parse(String(init?.body)); requests.push({ url: address, body });
+    if (address.includes('groq.com') && fail === 'quota') return response({ error: { code: 'rate_limit_exceeded', message: 'Rate limit reached for tokens per day' } }, 429);
+    if (address.includes('groq.com') && fail === 'auth') return response({ error: { message: 'invalid API key' } }, 401);
+    if (address.includes('groq.com') && fail === 'capacity') return response({ error: { message: 'capacity overloaded' } }, 429);
+    if (generation === 'hold') return streaming([{ choices: [{ delta: { content: 'partial ' } }] }], init?.signal as AbortSignal, true);
+    if (generation === 'agent' && !body.messages.some((m: any) => m.role === 'tool')) return streaming([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'tool1', function: { name: 'read_page', arguments: '{}' } }] } }] }]);
+    return streaming([{ choices: [{ delta: { content: '첫 응답 ' } }] }, { choices: [{ delta: { content: '완료' } }] }]);
+  };
+  const adapters = new AIProviders(transport); service = new AIService(vault, adapters);
+  const host: AIHost = { win, manager, workspaceId: 'workspace-default', searchURL: env.searchURL };
+  const command = (value: any) => service!.command(host, value);
+  const state = async () => (await command({ op: 'state' })).state!;
+  assert.equal((await state()).settings.enabled, false); assert.equal(requests.length, 0);
+  await command({ op: 'settings', updates: { enabled: true, dataConsent: true, referencePage: false } });
+  assert((await command({ op: 'connect', provider: 'groq', key: dummyKey, freeAccount: true })).ok);
+  assert((await command({ op: 'connect', provider: 'openrouter', key: dummyKey, freeAccount: false })).ok);
+  assert((await state()).models.some(m => !m.free));
+  await command({ op: 'settings', updates: { selectedModel: 'openrouter:qa-paid' } });
+  assert(!(await command({ op: 'send', text: 'test', agent: false, tabIds: [] })).ok);
+  await command({ op: 'settings', updates: { selectedModel: 'groq:qa-model' } });
+  assert((await command({ op: 'send', text: 'hello memory only', agent: false, tabIds: [] })).ok);
+  await wait(async () => (await state()).tasks.some(t => t.state === 'done'), 'chat complete');
+  assert((await state()).messages.some(m => m.text === '첫 응답 완료'));
+  assert(!(await fs.readFile(filename, 'utf8')).includes('hello memory only'));
+  check('mock official-format API model list/stream; paid selection rejected; no idle requests or persisted messages');
+  await command({ op: 'settings', updates: { fallbackConsent: true, autoFallback: true, priority: ['openrouter:qa-paid', 'openrouter:qa-free:free'] } });
+  fail = 'quota'; requests = [];
+  await command({ op: 'send', text: 'quota fallback', agent: false, tabIds: [] });
+  await wait(async () => (await state()).tasks.at(-1)?.state === 'done', 'fallback');
+  assert.equal(requests.length, 2); assert(requests[1].url.includes('openrouter')); assert.equal(requests[1].body.model, 'qa-free:free');
+  assert((await state()).notice?.includes('전환'));
+  for (const kind of ['auth', 'capacity'] as const) {
+    fail = kind; requests = []; await command({ op: 'send', text: kind, agent: false, tabIds: [] });
+    await wait(async () => (await state()).tasks.at(-1)?.state === 'error', kind);
+    assert.equal(requests.length, 1);
+  }
+  check('mock quota fallback order; never paid; auth/overload stop without switching');
+  fail = 'none'; generation = 'hold';
+  await command({ op: 'send', text: 'cancel request', agent: false, tabIds: [] });
+  await wait(async () => (await state()).messages.some(m => m.text.includes('partial')), 'stream started');
+  const task = (await state()).tasks.at(-1)!;
+  assert(!(await command({ op: 'send', text: 'duplicate', agent: false, tabIds: [] })).ok);
+  await command({ op: 'stop', taskId: task.id });
+  await wait(async () => (await state()).tasks.find(t => t.id === task.id)?.state === 'cancelled', 'cancel');
+  generation = 'agent';
+  await wait(async () => !(service as any).conversations.get(`${win.id}:workspace-default`).jobs.size, 'request cleanup');
+  await command({ op: 'settings', updates: { dedicatedTab: true } });
+  const before = manager.getActiveTabId();
+  assert((await command({ op: 'send', text: 'read in dedicated tab', agent: true, tabIds: [] })).ok);
+  await wait(async () => (await state()).tasks.at(-1)?.state === 'done', 'agent loop');
+  assert.equal(manager.getActiveTabId(), before);
+  assert((await state()).tasks.at(-1)?.tabId?.startsWith('ai-'));
+  check('mock tool roundtrip + real dedicated native tab, cancellation, duplicate prevention and cleanup');
+  await contents.loadURL(fixtureOrigin + '/login');
+  await command({ op: 'settings', updates: { dedicatedTab: false } });
+  assert((await command({ op: 'send', text: 'read after manual login', agent: true, tabIds: [] })).ok);
+  await wait(async () => (await state()).tasks.at(-1)?.state === 'login', 'login pause');
+  const loginTask = (await state()).tasks.at(-1)!;
+  await contents.loadURL(fixtureOrigin); // Owned fixture simulates a user finishing login.
+  await command({ op: 'resume', taskId: loginTask.id });
+  await wait(async () => (await state()).tasks.at(-1)?.state === 'done', 'login resume');
+  check('agent login pause and explicit resume after a manual page change');
+  generation = 'hold';
+  await command({ op: 'settings', updates: { concurrentAgents: true, dedicatedTab: false } });
+  assert((await command({ op: 'send', text: 'first current tab job', agent: true, tabIds: [] })).ok);
+  assert(!(await command({ op: 'send', text: 'same target conflict', agent: true, tabIds: [] })).ok);
+  manager.createTab('test-second', fixtureOrigin, false, 'workspace-default'); manager.switchTab('test-second');
+  assert((await command({ op: 'send', text: 'second separate tab job', agent: true, tabIds: [] })).ok);
+  assert(!(await command({ op: 'send', text: 'third job limit', agent: false, tabIds: [] })).ok);
+  const jobs = (await state()).tasks.filter(t => t.state === 'running');
+  assert.equal(jobs.length, 2);
+  await command({ op: 'stop', taskId: jobs[0].id });
+  assert((await state()).tasks.find(t => t.id === jobs[1].id)?.state === 'running');
+  await command({ op: 'stop', taskId: jobs[1].id });
+  await wait(async () => !(service as any).conversations.get(`${win.id}:workspace-default`).jobs.size, 'concurrent cleanup');
+  check('two independent agents, same-tab lock, max-two limit and individual stop');
+  await command({ op: 'clear' }); assert.equal((await state()).messages.length, 0);
+  service.detach(win.id); service = new AIService(new AIVault(filename), adapters);
+  assert.equal((await state()).messages.length, 0); assert.equal((await state()).settings.enabled, true);
+  check('close/reopen service clears conversation but restores settings and encrypted connections');
+  const summary = { ok: true, date: '2026-11-04', checks, liveBrowserNavigation, liveAIResponses: false, providerTransport: 'mock official schemas', realElectronViews: true, realAsyncOSKeyEncryption: true, profile };
+  await fs.writeFile(join(root, 'tmp/ai-qa/native-result.json'), JSON.stringify(summary, null, 2));
+  console.log('AI NATIVE QA COMPLETE:', checks.length, 'groups');
+}
+const deadline = setTimeout(() => { console.error('AI QA timed out'); app.exit(1); }, 150_000);
+run().then(() => { clearTimeout(deadline); service?.dispose(); manager?.destroyAll(); for (const win of windows) win.destroy(); server.close(); app.exit(0); }).catch(error => { console.error(String(error)); clearTimeout(deadline); service?.dispose(); manager?.destroyAll(); for (const win of windows) win.destroy(); server.close(); app.exit(1); });
