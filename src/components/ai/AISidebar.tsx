@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { X, Settings2, Plus, ArrowUp, Square, Camera, ArrowUpRight, Check, LoaderCircle, ChevronDown, Globe } from 'lucide-react';
+import { X, Settings2, Plus, ArrowUp, Square, Camera, ArrowUpRight, Check, LoaderCircle, ChevronDown, Globe, LockOpen, ShieldCheck } from 'lucide-react';
 import { AI_PROVIDER_NAMES, modelKey, type AIImagePreview, type AIMessage } from '../../../shared/ai';
 import type { Tab } from '../../types/browser';
 import { ToggleSwitch } from '../ToggleSwitch';
@@ -12,9 +12,9 @@ function CodeBlock({ children }: React.PropsWithChildren) {
   const [copied, setCopied] = useState(false);
   return <div className="null-ai-code"><button type="button" onClick={() => { void navigator.clipboard.writeText(ref.current?.textContent || '').then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>{copied ? '복사됨' : '코드 복사'}</button><pre ref={ref}>{children}</pre></div>;
 }
-const Message = React.memo(({ message }: { message: AIMessage }) => <article className="null-ai-message" data-role={message.role}>
-  {message.role === 'assistant' && <div className="null-ai-message-label">NULL</div>}
-  <ReactMarkdown skipHtml components={{ pre: CodeBlock, a: ({ href, children }) => /^https?:\/\//i.test(href || '') ? <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> : <span>{children}</span>, img: ({ alt }) => <span>{alt || '[이미지]'}</span> }}>{message.text}</ReactMarkdown>
+const Message = React.memo(({ message }: { message: AIMessage }) => <article className="null-ai-message" data-role={message.role} aria-label={message.role === 'user' ? '내 메시지' : 'NULL 답변'}>
+  <div className="null-ai-message-label">{message.role === 'assistant' && <span className="null-ai-sender-mark" aria-hidden="true"><Globe size={12}/></span>}{message.role === 'user' ? '나' : 'NULL'}</div>
+  <div className="null-ai-message-body">{message.role === 'user' ? <p className="null-ai-user-text">{message.text}</p> : <ReactMarkdown skipHtml components={{ pre: CodeBlock, a: ({ href, children }) => /^https?:\/\//i.test(href || '') ? <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> : <span>{children}</span>, img: ({ alt }) => <span>{alt || '[이미지]'}</span> }}>{message.text}</ReactMarkdown>}</div>
 </article>);
 
 export default function AISidebar({ workspaceId, tabs, activeTabId, open, onClose, onSettings, onShowTab, selection }: {
@@ -30,6 +30,7 @@ export default function AISidebar({ workspaceId, tabs, activeTabId, open, onClos
   const [selectionToken, setSelectionToken] = useState<string>();
   const [busy, setBusy] = useState(false);
   const scroll = useRef<HTMLDivElement>(null), field = useRef<HTMLTextAreaElement>(null);
+  const followLatest = useRef(true);
   const resize = useRef<{ x: number; width: number } | undefined>(undefined);
   const lastRevealed = useRef('');
   const models = state.models.filter(m => m.free && m.tools);
@@ -41,12 +42,13 @@ export default function AISidebar({ workspaceId, tabs, activeTabId, open, onClos
   useLayoutEffect(() => { window.dispatchEvent(new Event('resize')); }, [state.settings.position, state.settings.width, open]);
   useLayoutEffect(() => { if(field.current) { field.current.style.height='auto'; field.current.style.height=`${Math.min(140,field.current.scrollHeight)}px`; } }, [text]);
   useEffect(() => { if (selection) { setText(selection.prompt); setSelectionToken(selection.token); field.current?.focus(); } }, [selection?.revision]);
-  useEffect(() => { if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [state.messages, state.tasks]);
+  useEffect(() => { if (scroll.current && followLatest.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [state.messages, state.tasks]);
   useEffect(() => { setSelected(ids => ids.filter(id => tabs.some(tab => tab.id === id))); }, [tabs]);
   useEffect(() => { if(latest?.state==='done'&&lastRevealed.current!==latest.id){lastRevealed.current=latest.id;if(latest.result&&latest.tabId===activeTabId&&latest.result.tabId!==activeTabId)onShowTab(latest.result.tabId);} },[latest?.id,latest?.state,activeTabId,onShowTab]);
   const send = async () => {
     if (busy || running.length || !text.trim() || !ready || (image && !imageConfirmed)) return;
     setBusy(true);
+    followLatest.current = true;
     try {
       const result = await command({ op: 'send', text, agent: true, tabIds: selected, imageToken: image?.token, selectionToken });
       if (result.ok) { setText(''); setImage(undefined); setImageConfirmed(false); setSelectionToken(undefined); setContextOpen(false); }
@@ -65,7 +67,7 @@ export default function AISidebar({ workspaceId, tabs, activeTabId, open, onClos
       <button className="null-icon-button" title="연결 설정" aria-label="AI 설정" onClick={onSettings}><Settings2 size={15}/></button>
       <button className="null-icon-button" aria-label="AI 사이드바 닫기" onClick={onClose}><X size={17}/></button>
     </div></header>
-    <div className="null-ai-messages" ref={scroll} aria-live="polite" aria-relevant="additions text">
+    <div className="null-ai-messages" ref={scroll} aria-live="polite" aria-relevant="additions text" onScroll={event=>{const el=event.currentTarget;followLatest.current=el.scrollHeight-el.scrollTop-el.clientHeight<56;}}>
       {!state.messages.length && <div className="null-ai-empty"><div className="null-ai-empty-mark"><Globe size={23} strokeWidth={1.4}/></div><strong>어떤 작업을 할까요?</strong><p>사이트를 열고, 찾고, 직접 처리합니다.</p>{setupNeeded && <button className="null-ai-connect" onClick={onSettings}>{state.connections.some(c=>c.connected)?'에이전트 설정':'API 연결'}</button>}{loading && <span>연결 확인 중…</span>}</div>}
       {state.messages.map(message => <Message key={message.id} message={message}/>)}
       {latest && <section className="null-ai-task" data-ai-task={latest.state}>
@@ -79,6 +81,7 @@ export default function AISidebar({ workspaceId, tabs, activeTabId, open, onClos
       {state.notice && <p className="null-ai-note" role="status">{state.notice}</p>}
     </div>
     <div className="null-ai-composer">
+      <div className="null-ai-composer-options"><button type="button" className="null-ai-permission" aria-label="에이전트 전체 허용" aria-pressed={state.settings.approvalMode === 'auto'} title={state.settings.approvalMode === 'auto' ? '실행 가능한 작업을 승인 없이 진행합니다. 로그인·민감한 입력은 직접 처리합니다. 클릭하면 중요 작업 확인 모드로 바꿉니다.' : '중요 작업은 승인 후 실행합니다. 클릭하면 전체 허용으로 바꿉니다.'} onClick={()=>void command({op:'settings',updates:{approvalMode:state.settings.approvalMode==='auto'?'confirm':'auto'}})}>{state.settings.approvalMode==='auto'?<LockOpen size={12}/>:<ShieldCheck size={12}/>}<span>{state.settings.approvalMode==='auto'?'전체 허용':'중요 작업 확인'}</span></button></div>
       {contextOpen && <div className="null-ai-context" aria-label="작업 참조 설정"><div className="null-ai-reference"><span>현재 페이지 참조</span><ToggleSwitch aria-label="AI 페이지 참조" checked={state.settings.referencePage} onCheckedChange={referencePage=>void command({op:'settings',updates:{referencePage}})}/></div><details className="null-ai-tab-picker"><summary>다른 탭 추가</summary>{tabs.filter(t=>/^https?:/.test(t.url)).map(tab=><label key={tab.id}><input type="checkbox" checked={selected.includes(tab.id)} disabled={!selected.includes(tab.id)&&selected.length>=3} onChange={e=>setSelected(ids=>e.target.checked?[...ids,tab.id]:ids.filter(id=>id!==tab.id))}/>{tab.title}</label>)}</details>{chosen?.image&&<button type="button" className="null-ai-context-action" aria-label="현재 페이지 캡처 첨부" disabled={!activeTabId||!state.settings.dataConsent} onClick={async()=>{if(activeTabId){const result=await command({op:'image',tabId:activeTabId});if(result.image){setImage(result.image);setImageConfirmed(false);}}}}><Camera size={15}/>화면 첨부</button>}</div>}
       {selectionToken && <div className="null-ai-attachment">선택한 텍스트<button aria-label="선택 텍스트 제외" onClick={()=>setSelectionToken(undefined)}><X size={12}/></button></div>}
       {image && <div className="null-ai-image-preview"><img src={image.dataURL} alt="전송 전 확인할 현재 페이지 캡처"/><div className="null-ai-reference"><span>캡처 확인 후 전송</span><ToggleSwitch aria-label="캡처 이미지 전송 확인" checked={imageConfirmed} onCheckedChange={setImageConfirmed}/><button aria-label="캡처 제외" onClick={()=>{setImage(undefined);setImageConfirmed(false);}}><X size={13}/></button></div></div>}

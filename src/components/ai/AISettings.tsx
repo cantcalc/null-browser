@@ -37,6 +37,7 @@ export default function AISettings({ workspaceId }: { workspaceId: string }) {
     </form>
     <label className="null-ai-field">에이전트 모델<select aria-label="기본 AI 모델" value={state.settings.selectedModel} onChange={e=>update({selectedModel:e.target.value})}><option value="">연결 후 선택</option>{models.map(m=><option key={modelKey(m)} value={modelKey(m)}>{AI_PROVIDER_NAMES[m.provider]} · {m.name}</option>)}</select></label>
     {row('에이전트 사용','탐색·검색·일반 입력과 클릭을 자동 실행합니다.',state.settings.enabled,enabled=>update({enabled}))}
+    {row('전체 허용','실행 가능한 작업을 매번 승인하지 않고 진행합니다. 끄면 중요 작업을 확인합니다.',state.settings.approvalMode==='auto',automatic=>update({approvalMode:automatic?'auto':'confirm'}))}
     {row('페이지 데이터 전송 동의','선택한 페이지·텍스트·확인한 캡처를 연결한 AI 제공자에게 전송합니다.',state.settings.dataConsent,dataConsent=>update({dataConsent}))}
     <details className="null-ai-advanced"><summary>추가 설정<ChevronDown size={13}/></summary>
       <label className="null-ai-field">사이드바 위치<select aria-label="AI 사이드바 위치" value={state.settings.position} onChange={e=>update({position:e.target.value as 'left'|'right'})}><option value="right">오른쪽</option><option value="left">왼쪽</option></select></label>
@@ -47,7 +48,7 @@ export default function AISettings({ workspaceId }: { workspaceId: string }) {
       {state.settings.fallbackConsent&&<><div className="null-ai-actions"><select aria-label="전환 우선순위에 추가할 모델" value={priority} onChange={e=>setPriority(e.target.value)}><option value="">대체 모델 선택</option>{models.filter(m=>!state.settings.priority.includes(modelKey(m))).map(m=><option key={modelKey(m)} value={modelKey(m)}>{AI_PROVIDER_NAMES[m.provider]} · {m.name}</option>)}</select><button type="button" disabled={!priority} onClick={()=>{update({priority:[...state.settings.priority,priority]});setPriority('');}}>추가</button></div><ol className="null-ai-priority">{state.settings.priority.map((id,i)=><li key={id}><span>{i+1}. {state.models.find(m=>modelKey(m)===id)?.name||id}</span><button type="button" aria-label={`${id} 순위 올리기`} disabled={!i} onClick={()=>{const p=[...state.settings.priority];[p[i-1],p[i]]=[p[i],p[i-1]];update({priority:p});}}>↑</button><button type="button" aria-label={`${id} 순위 내리기`} disabled={i===state.settings.priority.length-1} onClick={()=>{const p=[...state.settings.priority];[p[i],p[i+1]]=[p[i+1],p[i]];update({priority:p});}}>↓</button><button type="button" onClick={()=>update({priority:state.settings.priority.filter(v=>v!==id)})}>제거</button></li>)}</ol></>}
       <button type="button" className="null-quiet-button" onClick={()=>void command({op:'clear'})}>현재 작업·대화 지우기</button>
     </details>
-    <p className="null-ai-settings-footer">API 키는 기기에 암호화해 저장하고 대화는 앱 종료 시 삭제합니다. 제공자의 데이터 보관 정책은 별개입니다. 무료 모델만 표시하지만 계정 비용을 보장하지 않습니다. 결제·게시·전송·삭제·계정 변경은 승인받고, 로그인·비밀번호·결제 정보·파일 업로드는 직접 처리합니다. 설정은 즉시 저장됩니다.</p>
+    <p className="null-ai-settings-footer">API 키는 기기에 암호화해 저장하고 대화는 앱 종료 시 삭제합니다. 제공자의 데이터 보관 정책은 별개입니다. 무료 모델만 표시하지만 계정 비용을 보장하지 않습니다. 전체 허용에서는 실행 가능한 클릭·입력·제출을 별도 승인 없이 진행합니다. 로그인·비밀번호·결제 정보·파일 업로드는 직접 처리합니다. 설정은 즉시 저장됩니다.</p>
     {error&&<p className="null-ai-error" role="alert">{error}</p>}
   </section>;
 }

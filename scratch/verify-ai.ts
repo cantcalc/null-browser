@@ -136,7 +136,7 @@ async function run() {
   const approvedId = approvedObservation.headingsAndControls.find((e: any) => e.label === 'Send message').id;
   await approvedTools.run({ id: 'click2', name: 'click', arguments: { elementId: approvedId } });
   assert.equal(await contents.executeJavaScript("document.querySelector('#send').dataset.executed"), 'yes');
-  check('important clicks require explicit approval; denial does not execute');
+  check('confirmation mode important clicks require explicit approval; denial does not execute');
   const after = JSON.parse(await tools.run({ id: 'read4', name: 'read_page', arguments: {} }));
   const searchId = after.headingsAndControls.find((e: any) => e.inputType === 'search').id;
   await tools.run({ id: 'type', name: 'type_text', arguments: { elementId: searchId, text: 'React useEffect' } });
@@ -184,7 +184,20 @@ async function run() {
   await wait(()=>contents.executeJavaScript('window.__qaTrustedInput===true'),'native trusted pointer input');
   await tools.run({id:'user-interrupted',name:'scroll',arguments:{pixels:100}});
   assert(pauses>pausesBeforeRefresh,'Trusted manual interaction did not pause the agent');win.hide();
-  check('actual trusted user input still pauses automatic agent actions');
+  check('confirmation mode trusted user input pauses agent actions');
+  const automaticTools=new AgentTools(pages,{...env,approvalMode:()=> 'auto',approve:async()=>{throw Error('Full Allow unexpectedly requested approval')},pause:async()=>{throw Error('Full Allow unexpectedly requested routine resume')}});
+  let automaticObservation=JSON.parse(await automaticTools.run({id:'automatic-read',name:'read_page',arguments:{}}));
+  await contents.executeJavaScript("delete document.querySelector('#send').dataset.executed;true");
+  await automaticTools.run({id:'automatic-send',name:'click',arguments:{elementId:automaticObservation.headingsAndControls.find((e:any)=>e.label==='Send message').id}});
+  assert.equal(await contents.executeJavaScript("document.querySelector('#send').dataset.executed"),'yes');
+  automaticObservation=JSON.parse(await automaticTools.run({id:'automatic-write-read',name:'read_page',arguments:{}}));
+  await automaticTools.run({id:'automatic-write',name:'click',arguments:{elementId:automaticObservation.headingsAndControls.find((e:any)=>e.label==='Apply changes').id}});
+  assert.equal(await contents.executeJavaScript("document.querySelector('#write-form').form.dataset.executed"),'yes');
+  await contents.loadURL(fixtureOrigin+'?refreshed=1');
+  const automaticRefresh=await automaticTools.run({id:'automatic-stale',name:'click',arguments:{elementId:automaticObservation.headingsAndControls[0].id}});
+  assert(automaticRefresh.includes('최신 화면'));
+  await assert.rejects(()=>automaticTools.run({id:'automatic-private',name:'navigate',arguments:{url:'http://127.0.0.1/'}}));
+  check('Full Allow skips click/write approvals and stale-page resume; private URL remains blocked');
   try {
     const approvalsBeforeNavigation = approvals;
     const publicTools = new AgentTools(pages, { ...env, userRequest: '공개 문서 찾아줘', searchURL: query => 'https://www.google.com/search?q=' + encodeURIComponent(query), pause: async () => { throw Error('External site requires manual login/challenge'); } });
@@ -227,6 +240,14 @@ async function run() {
     if (address.includes('groq.com') && fail === 'quota') return response({ error: { code: 'rate_limit_exceeded', message: 'Rate limit reached for tokens per day' } }, 429);
     if (address.includes('groq.com') && fail === 'auth') return response({ error: { message: 'invalid API key' } }, 401);
     if (address.includes('groq.com') && fail === 'capacity') return response({ error: { message: 'capacity overloaded' } }, 429);
+    if (generation==='agent-write') {
+      const observed=body.messages.filter((m:any)=>m.role==='tool');
+      if(!observed.length)return streaming([{choices:[{delta:{tool_calls:[{index:0,id:'write-read',function:{name:'read_page',arguments:'{}'}}]}}]}]);
+      if(!observed.some((m:any)=>m.tool_call_id==='write-click')) {
+        const page=JSON.parse(observed.at(-1).content),control=page.headingsAndControls.find((e:any)=>e.label==='Send message');
+        return streaming([{choices:[{delta:{tool_calls:[{index:0,id:'write-click',function:{name:'click',arguments:JSON.stringify({elementId:control.id})}}]}}]}]);
+      }
+    }
     if (generation === 'hold') return streaming([{ choices: [{ delta: { content: 'partial ' } }] }], init?.signal as AbortSignal, true);
     if (['agent', 'agent-navigation'].includes(generation) && !body.messages.some((m: any) => m.role === 'tool')) return streaming([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'tool1', function: generation === 'agent-navigation' ? {name:'navigate',arguments:JSON.stringify({url:'https://example.com/'})} : { name: 'read_page', arguments: '{}' } }] } }] }]);
     return streaming([{ choices: [{ delta: { content: '첫 응답 ' } }] }, { choices: [{ delta: { content: '완료' } }] }]);
@@ -235,7 +256,7 @@ async function run() {
   const host: AIHost = { win, manager, workspaceId: 'workspace-default', searchURL: env.searchURL };
   const command = (value: any) => service!.command(host, value);
   const state = async () => (await command({ op: 'state' })).state!;
-  assert.equal((await state()).settings.enabled, false); assert.equal(requests.length, 0);
+  assert.equal((await state()).settings.enabled, false); assert.equal((await state()).settings.approvalMode,'auto'); assert.equal(requests.length, 0);
   await command({ op: 'settings', updates: { enabled: true, dataConsent: true, referencePage: false } });
   assert((await command({ op: 'connect', provider: 'groq', key: dummyKey, freeAccount: true })).ok);
   assert((await command({ op: 'connect', provider: 'openrouter', key: dummyKey, freeAccount: false })).ok);
@@ -303,6 +324,21 @@ async function run() {
   await command({ op: 'resume', taskId: loginTask.id });
   await wait(async () => (await state()).tasks.at(-1)?.state === 'done', 'login resume');
   check('agent login pause and explicit resume after a manual page change');
+  generation='agent-write';
+  await command({op:'settings',updates:{approvalMode:'confirm'}});
+  await command({op:'send',text:'Click Send in the owned local fixture',agent:true,tabIds:[]});
+  await wait(async()=>(await state()).tasks.at(-1)?.state==='approval','confirmation mode waits');
+  assert.equal(await contents.executeJavaScript("document.querySelector('#send').dataset.executed"),undefined);
+  await command({op:'settings',updates:{approvalMode:'auto'}});
+  await wait(async()=>(await state()).tasks.at(-1)?.state==='done','Full Allow resolves pending approval');
+  assert.equal(await contents.executeJavaScript("document.querySelector('#send').dataset.executed"),'yes');
+  assert(requests.at(-1).body.messages[0].content.includes('Important confirmation mode'));
+  await contents.executeJavaScript("delete document.querySelector('#send').dataset.executed;true");
+  await command({op:'send',text:'Click Send in the owned local fixture again',agent:true,tabIds:[]});
+  await wait(async()=>(await state()).tasks.at(-1)?.state==='done','Full Allow next task runs without resolve');
+  assert.equal(await contents.executeJavaScript("document.querySelector('#send').dataset.executed"),'yes');
+  assert(requests.at(-1).body.messages[0].content.includes('user selected Full Allow'));
+  check('service permission mode persists, resolves existing approval and automatically runs next task');
   generation = 'hold';
   await command({ op: 'settings', updates: { concurrentAgents: true, dedicatedTab: false } });
   assert((await command({ op: 'send', text: 'first current tab job', agent: true, tabIds: [] })).ok);
@@ -319,7 +355,7 @@ async function run() {
   check('two independent agents, same-tab lock, max-two limit and individual stop');
   await command({ op: 'clear' }); assert.equal((await state()).messages.length, 0);
   service.detach(win.id); service = new AIService(new AIVault(filename), adapters);
-  assert.equal((await state()).messages.length, 0); assert.equal((await state()).settings.enabled, true);
+  assert.equal((await state()).messages.length, 0); assert.equal((await state()).settings.enabled, true);assert.equal((await state()).settings.approvalMode,'auto');
   check('close/reopen service clears conversation but restores settings and encrypted connections');
   const summary = { ok: true, date: '2026-11-04', checks, liveBrowserNavigation, liveAIResponses: false, providerTransport: 'mock official schemas', realElectronViews: true, realAsyncOSKeyEncryption: true, profile };
   await fs.writeFile(join(root, 'tmp/ai-qa/native-result.json'), JSON.stringify(summary, null, 2));

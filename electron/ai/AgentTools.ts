@@ -23,6 +23,7 @@ export interface AgentEnvironment {
   approve: (action: string, target: string, detail: string) => Promise<boolean>;
   pause: (reason: 'login' | 'paused', description: string) => Promise<void>;
   progress: (label: string) => void;
+  approvalMode?: () => 'auto' | 'confirm';
 }
 export class AgentTools {
   private last?: PageSnapshot;
@@ -97,7 +98,7 @@ export class AgentTools {
       if (call.name === 'search' || call.name === 'navigate') {
         if (this.last) await this.validate();
         else if (this.target().getURL() !== this.baselineURL) {
-          await this.env.pause('paused', '작업 시작 뒤 페이지가 변경되었습니다. 확인 후 재개하세요.');
+          if (this.env.approvalMode?.() !== 'auto') await this.env.pause('paused', '작업 시작 뒤 페이지가 변경되었습니다. 확인 후 재개하세요.');
           return JSON.stringify(await this.observe());
         }
         const value = args[call.name === 'search' ? 'query' : 'url'];
@@ -105,7 +106,7 @@ export class AgentTools {
         const url = call.name === 'search' ? this.env.searchURL(value) : value;
         if (!isAgentURL(url)) throw Error('에이전트는 공개 HTTP/HTTPS 주소로만 이동할 수 있습니다.');
         await requirePublicAgentURL(url, this.env.signal);
-        if (call.name !== 'search' && riskyNavigation(url) && !await this.env.approve('주소 이동', publicURL(url), url.slice(0, 2000))) return '사용자가 이동을 거부했습니다. 같은 작업을 반복하지 마세요.';
+        if (this.env.approvalMode?.() !== 'auto' && call.name !== 'search' && riskyNavigation(url) && !await this.env.approve('주소 이동', publicURL(url), url.slice(0, 2000))) return '사용자가 이동을 거부했습니다. 같은 작업을 반복하지 마세요.';
         const wc = this.target();
         this.last = undefined;
         this.observed.delete(this.env.targetId);
@@ -139,7 +140,7 @@ export class AgentTools {
           if (call.name === 'open_link' && (!element.href || !isAgentURL(element.href))) throw Error('공개 웹 링크만 열 수 있습니다.');
           const actionId = snapshot.url + ':' + element.fingerprint;
           if (this.denied.has(actionId)) return '이미 거부된 작업입니다. 반복하지 마세요.';
-          if (requiresInteractionApproval(element) && !await this.env.approve(call.name === 'open_link' ? '링크 열기' : '중요 작업 확인', publicURL(snapshot.url), `${element.label || '이름 없는 버튼'}\n이 작업에서 입력한 내용: ${this.entered.join('\n') || '없음'}\n대상 페이지와 실제 영향을 직접 확인한 뒤 승인하세요.`)) { this.denied.add(actionId); return '사용자가 클릭을 거부했습니다. 반복하지 마세요.'; }
+          if (this.env.approvalMode?.() !== 'auto' && requiresInteractionApproval(element) && !await this.env.approve(call.name === 'open_link' ? '링크 열기' : '중요 작업 확인', publicURL(snapshot.url), `${element.label || '이름 없는 버튼'}\n이 작업에서 입력한 내용: ${this.entered.join('\n') || '없음'}\n대상 페이지와 실제 영향을 직접 확인한 뒤 승인하세요.`)) { this.denied.add(actionId); return '사용자가 클릭을 거부했습니다. 반복하지 마세요.'; }
           await this.validate(); this.env.signal.throwIfAborted();
           if (element.tag === 'a' && isAgentURL(element.href)) {
             // Keep target=_blank links inside the one authorized task tab.
@@ -160,6 +161,9 @@ export class AgentTools {
         return JSON.stringify({ notice: '화면의 요소가 갱신되어 클릭/입력을 실행하지 않았습니다. 아래 새 관찰의 요소 ID로 다시 판단하세요.', page: await this.observe() });
       }
       if (/PAGE_CHANGED|USER_INTERACTION|LOGIN_OR_SENSITIVE/.test(String(error))) {
+        if (this.env.approvalMode?.() === 'auto' && !String(error).includes('LOGIN_OR_SENSITIVE')) {
+          return JSON.stringify({ notice: '페이지 상태가 바뀌어 이전 동작은 실행하지 않았습니다. 최신 화면으로 작업을 이어가세요.', page: await this.observe() });
+        }
         await this.env.pause('paused', '사용자가 페이지를 조작했거나 화면이 변경되었습니다. 확인 후 재개하세요.');
         return JSON.stringify(await this.observe());
       }

@@ -11,11 +11,13 @@ export interface AISettings {
   referencePage: boolean; dataConsent: boolean; fallbackConsent: boolean;
   autoFallback: boolean; priority: string[]; selectedModel: string;
   dedicatedTab: boolean; concurrentAgents: boolean; showProgress: boolean;
+  approvalMode: 'auto' | 'confirm';
 }
 export const DEFAULT_AI_SETTINGS: AISettings = {
   enabled: false, position: 'right', width: 360, referencePage: true,
   dataConsent: false, fallbackConsent: false, autoFallback: false,
   priority: [], selectedModel: '', dedicatedTab: true, concurrentAgents: false, showProgress: true,
+  approvalMode: 'auto',
 };
 export interface AIConnection { provider: AIProvider; connected: boolean; status: 'disconnected' | 'saved' | 'ready' | 'error'; message?: string; freeAccount: boolean }
 export interface AIMessage { id: string; role: 'user' | 'assistant'; text: string; model?: string; taskId?: string; references?: Array<{ title: string; url: string }>; status?: string; usesPageData?: boolean }

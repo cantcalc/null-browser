@@ -16,6 +16,9 @@ const launchServices = packaged && process.platform === 'darwin' && process.env.
 const mockOSStorage = !launchServices;
 const appBundle = process.env.NULL_AI_APP_PATH || path.join(root, 'release/mac-arm64/NULL.app');
 fs.mkdirSync(path.join(root,'tmp/ai-qa'),{recursive:true});
+const resultFile=path.join(root,`tmp/ai-qa/ui-${packaged?'packaged':'source'}-result.json`);
+fs.rmSync(resultFile,{force:true});
+results.version=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version;
 if(packaged) require('esbuild').buildSync({absWorkingDir:root,entryPoints:['electron/ai/Vault.ts'],outfile:path.join(root,'tmp/ai-qa/vault-probe.cjs'),bundle:true,platform:'node',format:'cjs',external:['electron']});
 let appProcess, main, page, sockets = [], output = '', launches = 0;
 async function waitFor(check, message, timeout = 20000) {
@@ -99,6 +102,30 @@ async function quit() {
 const mainWindow = `process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>!w.webContents.getURL().includes('incognito=1'))`;
 const fixture = http.createServer((_req,res) => { res.setHeader('content-type','text/html'); res.end('<!doctype html><title>NULL AI UI fixture</title><h1>Owned article</h1><p>Body text for native view bounds.</p>'); });
 async function click(selector) { return page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click();true`); }
+async function resizeViewport(width,height) {
+  await main.evaluate(`${mainWindow}.setContentSize(${width},${height});true`);
+  await delay(200);
+  const actual=await main.evaluate(`${mainWindow}.getContentBounds()`);
+  console.log('AI QA viewport',JSON.stringify({requested:{width,height},actual}));
+  await waitFor(()=>page.evaluate(`innerWidth===${actual.width}&&innerHeight===${actual.height}`),'renderer/native content size agree');
+  return actual;
+}
+async function chooseTheme(theme) {
+  await click('button[aria-label="브라우저 설정"]');
+  await waitFor(()=>page.evaluate(`!!Array.from(document.querySelectorAll('.null-settings-navigation button')).find(b=>b.textContent==='모양 및 새 탭')`),'appearance settings entry');
+  await page.evaluate(`Array.from(document.querySelectorAll('.null-settings-navigation button')).find(b=>b.textContent==='모양 및 새 탭').click();true`);
+  await waitFor(()=>page.evaluate(`!!document.querySelector('[data-theme-choice="${theme}"]')`),'theme choice');
+  await click(`[data-theme-choice="${theme}"]`);
+  await waitFor(()=>page.evaluate(`document.querySelector('[data-theme-choice="${theme}"]').getAttribute('aria-pressed')==='true'`),'theme draft committed');
+  if(!await page.evaluate(`window.electronAPI.getSettings().then(s=>s.theme===${JSON.stringify(theme)})`)) {
+    await waitFor(()=>page.evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='설정 저장'&&!b.disabled)`),'theme save ready');
+    await page.evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='설정 저장').click();true`);
+  }
+  await waitFor(()=>page.evaluate(`window.electronAPI.getSettings().then(s=>s.theme===${JSON.stringify(theme)})`),'theme persisted from actual settings UI');
+  await page.evaluate(`Array.from(document.querySelectorAll('[data-tab-id]')).find(el=>el.textContent.includes('NULL AI UI fixture')).click();true`);
+  await waitFor(()=>page.evaluate(`document.documentElement.dataset.theme===${JSON.stringify(theme)}&&!document.querySelector('[data-settings-section]')`),'conversation theme applied');
+}
+
 async function bounds() {
   const chrome = await page.evaluate(`(()=>{const panel=document.querySelector('[data-ai-sidebar]'),r=panel.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:innerHeight,screenWidth:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth+1,panelOverflow:panel.scrollWidth>panel.clientWidth+1}})()`);
   const native = await main.evaluate(`(()=>{const win=${mainWindow},view=win.contentView.children.find(v=>v.getVisible());return view?view.getBounds():null})()`);
@@ -133,10 +160,10 @@ async function run() {
   assert(results.guestBridgeIsolated,'website got privileged chrome API');
   results.layouts=[];
   for(const [width,height] of [[800,600],[1280,720],[1440,900]]) {
-    await main.evaluate(`${mainWindow}.setSize(${width},${height});true`);
+    const actual=await resizeViewport(width,height);
     for(const position of ['right','left']) {
       await page.evaluate(`window.electronAPI.aiCommand({op:'settings',updates:{position:${JSON.stringify(position)},width:360}})`);
-      await delay(220); results.layouts.push({width,height,position,...await bounds()});
+      await delay(220); results.layouts.push({requested:{width,height},width:actual.width,height:actual.height,position,...await bounds()});
     }
   }
   await page.evaluate(`document.querySelector('[role="separator"][aria-label="AI 사이드바 크기 조절"]').focus();true`);
@@ -154,7 +181,7 @@ async function run() {
   await main.evaluate(`${mainWindow}.setSize(800,600);true`); await delay(150);
   assert(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'settings overflow at 800');
   const image=await page.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tmp/ai-qa/ui-settings-dark.png'),Buffer.from(image.data,'base64'));
-  await page.evaluate(`window.electronAPI.updateSettings({theme:'paper'})`);
+  // Theme coverage below uses the real Settings UI, not only the persistence IPC.
   // Reopen the settings route after React settings are refreshed on restart.
   // Exercise actual UI -> preload -> guarded IPC -> encrypted vault ->
   // provider adapter -> SSE -> delta IPC -> Markdown, with a mock transport.
@@ -175,13 +202,35 @@ async function run() {
   await click('button[aria-label="NULL AI 열기"]');
   await waitFor(()=>page.evaluate('!!document.querySelector("[data-ai-sidebar][data-open=true]")'),'open connected sidebar');
   const message=async value=>{await page.evaluate(`(()=>{const el=document.querySelector('textarea[aria-label="AI 메시지"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));return true})()`);await click('button[aria-label="AI 메시지 전송"]');};
-  await message('UI streaming fixture');
+  await message('UI streaming fixture\n**그대로 보여야 하는 사용자 입력**\n'+'내가 입력한 내용과 AI 답변을 확실히 구분합니다. '.repeat(10));
   await waitFor(()=>page.evaluate(`!!document.querySelector('[data-ai-task="running"]')`),'UI streaming starts');
   await click('button[aria-label="AI 사이드바 닫기"]');
   await delay(500);await click('button[aria-label="NULL AI 열기"]');
   await waitFor(()=>page.evaluate(`!!document.querySelector('[data-ai-task="done"]')`),'response survived close/reopen');
   assert(await page.evaluate('!!document.querySelector("[data-ai-sidebar] pre code")'),'Markdown code block');
   assert(await page.evaluate('typeof window.__nullAIXSS==="undefined"&&!document.querySelector("[data-ai-sidebar] a[href^=javascript]")'),'AI Markdown XSS');
+  assert(await page.evaluate(`document.querySelector('button[aria-label="에이전트 전체 허용"]').getAttribute('aria-pressed')==='true'`),'Full Allow not default');
+  await click('button[aria-label="에이전트 전체 허용"]');
+  await waitFor(()=>page.evaluate(`window.electronAPI.aiCommand({op:'state'}).then(r=>r.state.settings.approvalMode==='confirm')`),'confirmation mode selected');
+  await click('button[aria-label="에이전트 전체 허용"]');
+  await waitFor(()=>page.evaluate(`window.electronAPI.aiCommand({op:'state'}).then(r=>r.state.settings.approvalMode==='auto')`),'Full Allow restored');
+  results.conversationStyles=[];
+  await resizeViewport(1280,800);
+  for(const theme of ['noir','paper']) {
+    await chooseTheme(theme);await delay(200);
+    const style=await page.evaluate(`(()=>{const user=document.querySelector('.null-ai-message[data-role=user]'),answer=document.querySelector('.null-ai-message[data-role=assistant]'),bubble=user.querySelector('.null-ai-message-body'),panel=document.querySelector('[data-ai-sidebar]'),u=bubble.getBoundingClientRect(),a=answer.getBoundingClientRect();return {userLabel:user.getAttribute('aria-label'),answerLabel:answer.getAttribute('aria-label'),userBackground:getComputedStyle(bubble).backgroundColor,userColor:getComputedStyle(bubble).color,selectable:getComputedStyle(bubble.querySelector('p')).userSelect==='text',answerBackground:getComputedStyle(answer.querySelector('.null-ai-message-body')).backgroundColor,userLeft:u.left,answerLeft:a.left,userMarkup:!!bubble.querySelector('strong'),overflow:panel.scrollWidth>panel.clientWidth+1}})()`);
+    assert(style.userLabel==='내 메시지'&&style.answerLabel==='NULL 답변','Sender labels missing');
+    assert(style.userLeft>style.answerLeft&&!style.userMarkup&&style.selectable&&!style.overflow,'Conversation layout/ordinary user text incorrect');
+    assert(style.userBackground!==style.answerBackground&&style.userColor!==style.userBackground,'Message surfaces not distinguishable');
+    results.conversationStyles.push({theme,...style});
+    await page.evaluate(`(()=>{const messages=document.querySelector('.null-ai-messages');messages.scrollTop=0;messages.dispatchEvent(new Event('scroll'));return true})()`);
+    const image=await page.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,`tmp/ai-qa/ui-conversation-${theme}.png`),Buffer.from(image.data,'base64'));
+  }
+  await page.evaluate(`(()=>{const messages=document.querySelector('.null-ai-messages');messages.scrollTop=0;messages.dispatchEvent(new Event('scroll'));return true})()`);
+  await page.evaluate(`window.electronAPI.aiCommand({op:'settings',updates:{showProgress:true}})`);await delay(150);
+  assert(await page.evaluate(`document.querySelector('.null-ai-messages').scrollTop===0`),'Reading old messages jumps to bottom');
+  results.readingPositionPreserved=true;results.fullAllowMode=true;
+
   await message('slow-fixture');
   await waitFor(()=>page.evaluate(`!!document.querySelector('[data-ai-task="running"]')`),'cancellable UI request');
   await waitFor(()=>main.evaluate('global.__nullAIQAMetrics().pending>0'),'actual pending provider stream');
@@ -211,7 +260,7 @@ async function run() {
   await quit(); await launch();
   await main.evaluate(`process.mainModule.require(${JSON.stringify(path.join(root,'scratch/ai-network-fixture.cjs'))}).install({mockOSStorage:${mockOSStorage}})`);
   const restored=await page.evaluate('window.electronAPI.aiCommand({op:"state"})');
-  assert(restored.state.settings.position==='left'&&restored.state.settings.width===380&&restored.state.settings.enabled,'AI settings persistence');
+  assert(restored.state.settings.position==='left'&&restored.state.settings.width===380&&restored.state.settings.enabled&&restored.state.settings.approvalMode==='auto','AI settings persistence');
   assert(restored.state.messages.length===0&&restored.state.tasks.length===0,'conversation persisted across restart');
   const refreshed=await page.evaluate('window.electronAPI.aiCommand({op:"refresh",provider:"groq"})');
   if(!refreshed.ok)console.error('Owned QA restart connection:',JSON.stringify({error:refreshed.error,connections:refreshed.state?.connections}));
@@ -225,4 +274,4 @@ async function run() {
   fs.writeFileSync(path.join(root,`tmp/ai-qa/ui-${packaged?'packaged':'source'}-result.json`),JSON.stringify(results,null,2));
   console.log('AI UI QA passed:',JSON.stringify({layouts:results.layouts.length,privateBlocked:true,restartPersistence:true,packaged,runtimeLaunch:results.runtimeLaunch,mockTransport:true,mockOSStorage,realPackagedKeychain:results.realPackagedKeychain?.ok??'not-probed'}));
 }
-run().catch(async error=>{console.error(String(error));try{console.error('Owned QA diagnostics:',JSON.stringify(await page.evaluate(`window.electronAPI.aiCommand({op:'state'}).then(r=>({tasks:r.state.tasks.map(t=>({state:t.state,error:t.error,result:t.result,steps:t.steps})),address:document.querySelector('.null-omnibox input')?.value,tabs:[...document.querySelectorAll('[data-tab-id]')].map(t=>({id:t.dataset.tabId,active:t.dataset.active,title:t.textContent}))}))`)));}catch{}console.error(output.slice(-1800));process.exitCode=1;}).finally(async()=>{await quit();fixture.close();});
+run().catch(async error=>{results.ok=false;results.failure=String(error);results.packaged=packaged;results.mockOSStorage=mockOSStorage;fs.writeFileSync(resultFile,JSON.stringify(results,null,2));console.error(String(error));try{console.error('Owned QA diagnostics:',JSON.stringify(await page.evaluate(`window.electronAPI.aiCommand({op:'state'}).then(r=>({tasks:r.state.tasks.map(t=>({state:t.state,error:t.error,result:t.result,steps:t.steps})),address:document.querySelector('.null-omnibox input')?.value,tabs:[...document.querySelectorAll('[data-tab-id]')].map(t=>({id:t.dataset.tabId,active:t.dataset.active,title:t.textContent}))}))`)));}catch{}console.error(output.slice(-1800));process.exitCode=1;}).finally(async()=>{await quit();fixture.close();});
