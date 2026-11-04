@@ -140,7 +140,7 @@ export class AIProviders {
     if (provider === 'gemini' && raw.nextPageToken) throw Error('모델 목록이 한 페이지를 초과했습니다. 불완전한 목록을 사용하지 않았습니다.');
     return models.sort((a, b) => Number(b.free) - Number(a.free) || a.id.localeCompare(b.id));
   }
-  async complete(model: AIModel, key: string, messages: WireMessage[], definitions: ToolDefinition[], signal: AbortSignal, onText: (delta: string) => void): Promise<Completion> {
+  async complete(model: AIModel, key: string, messages: WireMessage[], definitions: ToolDefinition[], signal: AbortSignal, onText: (delta: string) => void, requireTool = false): Promise<Completion> {
     const provider = model.provider;
     if (!model.free || !model.text) throw Error('확인된 무료 텍스트 모델만 사용할 수 있습니다.');
     if (definitions.length && !model.tools) throw Error('이 모델은 도구 호출 지원이 확인되지 않았습니다.');
@@ -163,6 +163,7 @@ export class AIProviders {
       });
       body = { contents, systemInstruction: { parts: [{ text: messages.filter(m => m.role === 'system').map(m => m.content).join('\n') }] }, generationConfig: { maxOutputTokens: outputTokens }, ...(definitions.length ? { tools: [{ functionDeclarations: definitions.map(({ name, description, parameters }) => ({ name, description, parametersJsonSchema: parameters })) }] } : {}) };
       url = `${API.gemini}/models/${encodeURIComponent(model.id)}:streamGenerateContent?alt=sse`;
+      if (definitions.length && requireTool) body.toolConfig = { functionCallingConfig: { mode: 'ANY' } };
     } else {
       const native = messages.map(m => ({ role: m.role, content: m.image ? [{ type: 'text', text: m.content }, { type: 'image_url', image_url: { url: m.image } }] : m.content,
         ...(m.callId ? { tool_call_id: m.callId } : {}), ...(m.calls?.length ? { tool_calls: m.calls.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.arguments) } })) } : {}) }));
@@ -170,6 +171,7 @@ export class AIProviders {
         ...(definitions.length ? { tools: definitions.map(d => ({ type: 'function', function: d })), parallel_tool_calls: false } : {}),
         ...(provider === 'openrouter' ? { provider: { max_price: { prompt: 0, completion: 0, request: 0, image: 0 }, allow_fallbacks: false } } : {}) };
       url = `${API[provider]}/chat/completions`;
+      if (definitions.length && requireTool) body.tool_choice = 'required';
     }
     const response = await this.request(url, { method: 'POST', headers: this.headers(provider, key), body: JSON.stringify(body) }, signal, provider);
     let text = '';

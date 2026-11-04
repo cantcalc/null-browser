@@ -578,6 +578,40 @@ export class TabManager {
     return entry.view.webContents;
   }
 
+  /** AI navigation must update the same tab metadata/layout as the address bar. */
+  public async navigateTabForAI(tabId: string, url: string, signal: AbortSignal): Promise<void> {
+    const wc = await this.prepareTabForAI(tabId, signal);
+    if (!/^https?:/.test(url)) throw Error('일반 웹주소로만 이동할 수 있습니다.');
+    await new Promise<void>((resolve, reject) => {
+      let committed = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        wc.removeListener('did-navigate', commit);
+        wc.removeListener('did-stop-loading', stopped);
+        wc.removeListener('did-finish-load', stopped);
+        wc.removeListener('did-fail-load', failed);
+        wc.removeListener('destroyed', cancelled);
+        signal.removeEventListener('abort', cancelled);
+      };
+      const commit = () => { committed = true; };
+      const stopped = () => {
+        const entry = this.tabs.get(tabId);
+        if (!committed || wc.isDestroyed() || wc.isLoadingMainFrame()) return;
+        if (!entry || entry.error || !/^https?:/.test(wc.getURL()) || this.isVirtualUrl(entry.url)) { cleanup(); reject(Error('페이지 이동을 확인하지 못했습니다.')); return; }
+        cleanup(); resolve();
+      };
+      const failed = (_event: Electron.Event, code: number, _description: string, _url: string, mainFrame: boolean) => {
+        if (!mainFrame || code === -3) return;
+        cleanup(); reject(Error('작업 페이지를 불러오지 못했습니다.'));
+      };
+      const cancelled = () => { cleanup(); if (!wc.isDestroyed()) wc.stop(); reject(Error('작업 페이지 이동을 중지했습니다.')); };
+      const timer = setTimeout(() => { cleanup(); if (!wc.isDestroyed()) wc.stop(); reject(Error('페이지 이동 확인 시간이 초과되었습니다.')); }, 30_000);
+      wc.on('did-navigate', commit); wc.on('did-stop-loading', stopped); wc.on('did-finish-load', stopped); wc.on('did-fail-load', failed); wc.once('destroyed', cancelled);
+      signal.addEventListener('abort', cancelled, { once: true });
+      if (signal.aborted) cancelled(); else this.navigateTab(tabId, url);
+    });
+  }
+
   public getActiveTabId(): string | null {
     return this.activeTabId;
   }

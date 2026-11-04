@@ -58,6 +58,33 @@ export function riskyNavigation(value: string) {
   } catch { return true; }
 }
 
+// A named site's public landing page is already within a request mentioning
+// that site. This never authorizes a different host, query, or action path.
+export function requestedHomepage(value: string, request: string) {
+  try {
+    const url = new URL(value), host = url.hostname.replace(/^www\./,'').toLowerCase();
+    if (url.pathname !== '/' || url.search || url.hash || !isAgentURL(value)) return false;
+    if (request.toLowerCase().includes(host)) return true;
+    const names: Record<string, RegExp> = {
+      'youtube.com': /유튜브|\byoutube\b/i, 'google.com': /구글|\bgoogle\b/i,
+      'github.com': /깃허브|깃헙|\bgithub\b/i, 'naver.com': /네이버|\bnaver\b/i,
+      'chatgpt.com': /챗지피티|챗GPT|\bchatgpt\b/i,
+    };
+    return names[host]?.test(request) === true;
+  } catch { return false; }
+}
+export function requestedDestination(request: string): { hostname: string; pathname: string } | undefined {
+  const match = request.trim().match(/^(?:(?:please|지금|그냥|좀)\s*)?(?:(?:open|visit|go to)\s+(.+?)|(.+?)\s*(?:열어|켜|띄워|접속해|이동해)\s*(?:줘|주세요|줄래|요)?)[.!?]*$/i);
+  if (!match) return;
+  let target = (match[1] || match[2]).trim().replace(/\s*(?:please|사이트|홈페이지|페이지|좀)$/i,'').trim();
+  const names: Record<string,string> = { '유튜브':'https://www.youtube.com/',youtube:'https://www.youtube.com/','구글':'https://www.google.com/',google:'https://www.google.com/','깃허브':'https://github.com/','깃헙':'https://github.com/',github:'https://github.com/','네이버':'https://www.naver.com/',naver:'https://www.naver.com/',chatgpt:'https://chatgpt.com/','챗지피티':'https://chatgpt.com/' };
+  target = names[target.toLowerCase()] || target;
+  if (/\s/.test(target)) return;
+  if (!isAgentURL(target)) return;
+  const url = new URL(target);
+  return { hostname:url.hostname.replace(/^www\./,''),pathname:url.pathname };
+}
+
 export class ProviderError extends Error {
   constructor(public kind: 'quota' | 'auth' | 'network' | 'server' | 'invalid', public provider: AIProvider, message: string) { super(message); }
 }

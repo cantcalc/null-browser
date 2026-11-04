@@ -121,9 +121,9 @@ async function run() {
   const initial=await page.evaluate('window.electronAPI.aiCommand({op:"state"})');
   assert(initial.ok&&!initial.state.settings.enabled&&initial.state.messages.length===0,'fresh AI is disabled');
   await delay(250); results.memoryAfterAI=await memorySample();
-  assert(await page.evaluate('!!Array.from(document.querySelectorAll("[data-ai-sidebar] button")).find(b=>b.textContent==="연결 설정")'),'connection setup entry');
+  await waitFor(()=>page.evaluate('!!Array.from(document.querySelectorAll("[data-ai-sidebar] button")).find(b=>b.textContent==="API 연결")'),'connection setup entry');
   await page.evaluate(`window.electronAPI.createTab('ai-layout',${JSON.stringify(origin)},false,'workspace-default');window.electronAPI.switchTab('ai-layout');true`);
-  await page.evaluate(`window.electronAPI.aiCommand({op:'settings',updates:{enabled:true,dataConsent:true,position:'right',width:360}})`);
+  await page.evaluate(`window.electronAPI.aiCommand({op:'settings',updates:{enabled:true,dataConsent:true,dedicatedTab:false,position:'right',width:360}})`);
   await waitFor(()=>main.evaluate(`${mainWindow}.contentView.children.some(v=>v.webContents.getTitle()==='NULL AI UI fixture'&&!v.webContents.isLoading())`),'native fixture');
   // Direct tab creation does not mutate the renderer's React tabs; use the
   // existing external-open event to make the real App adopt the current page.
@@ -148,8 +148,8 @@ async function run() {
   assert(await page.evaluate('getComputedStyle(document.querySelector("[data-ai-sidebar]")).display!=="none"'),'reopen AI');
   await click('button[aria-label="AI 설정"]');
   await waitFor(()=>page.evaluate('!!document.querySelector("[data-settings-section=ai]")'),'AI settings route');
-  assert(await page.evaluate('document.querySelectorAll("[data-settings-section=ai] input[type=password]").length===3'),'provider key forms');
-  assert(await page.evaluate('document.querySelectorAll("[data-settings-section=ai] [role=switch]").length>=8'),'switch-based settings');
+  assert(await page.evaluate('document.querySelectorAll("[data-settings-section=ai] input[type=password]").length===1'),'provider key forms');
+  assert(await page.evaluate('!!document.querySelector("[data-settings-section=ai] .null-ai-advanced:not([open])")'),'advanced settings are collapsed by default');
   assert(await page.evaluate('Array.from(document.querySelectorAll("[data-settings-section=ai] input[type=password]")).every(i=>!i.value&&i.autocomplete==="off")'),'no key reads/fill');
   await main.evaluate(`${mainWindow}.setSize(800,600);true`); await delay(150);
   assert(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'settings overflow at 800');
@@ -158,6 +158,7 @@ async function run() {
   // Reopen the settings route after React settings are refreshed on restart.
   // Exercise actual UI -> preload -> guarded IPC -> encrypted vault ->
   // provider adapter -> SSE -> delta IPC -> Markdown, with a mock transport.
+  await page.evaluate(`(()=>{const el=document.querySelector('select[aria-label="연결할 AI 제공자"]');el.value='groq';el.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
   const keyField='[data-settings-section=ai] input[aria-label="Groq API 키"]';
   await page.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(keyField)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'null-ui-qa-dummy-key-not-a-real-credential');el.dispatchEvent(new Event('input',{bubbles:true}));return true})()`);
   await click('button[aria-label="Groq 무료 요금제 확인"]');
@@ -169,6 +170,8 @@ async function run() {
   const vaultFile = path.join(profile,'null-ai-vault.json');
   assert(!fs.readFileSync(vaultFile,'utf8').includes('null-ui-qa-dummy-key'),'API key stored in plaintext');
   assert((fs.statSync(vaultFile).mode&0o777)===0o600,'Vault permissions are not private');
+  await page.evaluate(`Array.from(document.querySelectorAll('[data-tab-id]')).find(el=>el.textContent.includes('NULL AI UI fixture')).click();true`);
+  await waitFor(()=>page.evaluate(`document.querySelector('.null-omnibox input').value.includes('127.0.0.1')`),'select owned task page');
   await click('button[aria-label="NULL AI 열기"]');
   await waitFor(()=>page.evaluate('!!document.querySelector("[data-ai-sidebar][data-open=true]")'),'open connected sidebar');
   const message=async value=>{await page.evaluate(`(()=>{const el=document.querySelector('textarea[aria-label="AI 메시지"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));return true})()`);await click('button[aria-label="AI 메시지 전송"]');};
@@ -181,8 +184,22 @@ async function run() {
   assert(await page.evaluate('typeof window.__nullAIXSS==="undefined"&&!document.querySelector("[data-ai-sidebar] a[href^=javascript]")'),'AI Markdown XSS');
   await message('slow-fixture');
   await waitFor(()=>page.evaluate(`!!document.querySelector('[data-ai-task="running"]')`),'cancellable UI request');
+  await waitFor(()=>main.evaluate('global.__nullAIQAMetrics().pending>0'),'actual pending provider stream');
   await click('button[aria-label="진행 중인 AI 작업 모두 중지"]');
   await waitFor(()=>page.evaluate(`!!document.querySelector('[data-ai-task="cancelled"]')`),'UI stop');
+  await page.evaluate(`window.electronAPI.aiCommand({op:'settings',updates:{dedicatedTab:true}})`);
+  await message('Open https://example.com/ open-page-fixture');
+  await waitFor(()=>page.evaluate(`!!document.querySelector('[data-ai-task="done"]')&&document.querySelector('.null-omnibox input').value.includes('example.com')`),'foreground agent page and address bar',40000);
+  const visibleAgent=await main.evaluate(`${mainWindow}.contentView.children.filter(v=>v.getVisible()).map(v=>({url:v.webContents.getURL(),title:v.webContents.getTitle(),bounds:v.getBounds()}))`);
+  assert(visibleAgent.some(v=>v.url.startsWith('https://example.com/')&&v.title.includes('Example')),'Agent navigated but its native page is still hidden');
+  assert(await page.evaluate(`!!document.querySelector('button[aria-label="확인한 작업 페이지 열기"]')`),'Verified result page missing');
+  assert(await page.evaluate(`document.querySelectorAll('[data-ai-sidebar] select').length===1&&!document.querySelector('[data-ai-sidebar] input[type="checkbox"]')`),'Sidebar is not agent-only or has duplicate model controls');
+  assert(await page.evaluate(`!document.querySelector('.null-ai-task-details')?.open`),'Detailed progress should be collapsed');
+  results.foregroundAgentPage=true;results.agentOnlySidebar=true;results.verifiedResult=true;
+  await message('narration-only-fixture');
+  await waitFor(()=>page.evaluate(`!!document.querySelector('[data-ai-task="error"]')`),'unverified success rejected');
+  assert(await page.evaluate(`!document.querySelector('[data-ai-sidebar]').textContent.includes('도구 없이 열었다고 주장')`),'Unverified model success leaked into UI');
+  results.unverifiedCompletionRejected=true;
   results.mockUIRoundtrip=await main.evaluate('global.__nullAIQAMetrics()');
   assert(results.mockUIRoundtrip.requests>=2&&results.mockUIRoundtrip.cancelled>=1,'UI request not actually aborted');
   results.markdownSafe=true;results.encryptedKeyForm=true;results.settingsUI=true; results.noStoredConversation=true;
@@ -197,6 +214,7 @@ async function run() {
   assert(restored.state.settings.position==='left'&&restored.state.settings.width===380&&restored.state.settings.enabled,'AI settings persistence');
   assert(restored.state.messages.length===0&&restored.state.tasks.length===0,'conversation persisted across restart');
   const refreshed=await page.evaluate('window.electronAPI.aiCommand({op:"refresh",provider:"groq"})');
+  if(!refreshed.ok)console.error('Owned QA restart connection:',JSON.stringify({error:refreshed.error,connections:refreshed.state?.connections}));
   assert(refreshed.ok&&refreshed.state.connections.some(c=>c.provider==='groq'&&c.status==='ready'),'Encrypted API credential did not decrypt after actual process restart');
   results.vaultPersistence={encryptedFile:true,mode:'0600',decryptedAfterRestart:true,realOSStorage:!mockOSStorage};
   await click('button[aria-label="NULL AI 열기"]');
@@ -207,4 +225,4 @@ async function run() {
   fs.writeFileSync(path.join(root,`tmp/ai-qa/ui-${packaged?'packaged':'source'}-result.json`),JSON.stringify(results,null,2));
   console.log('AI UI QA passed:',JSON.stringify({layouts:results.layouts.length,privateBlocked:true,restartPersistence:true,packaged,runtimeLaunch:results.runtimeLaunch,mockTransport:true,mockOSStorage,realPackagedKeychain:results.realPackagedKeychain?.ok??'not-probed'}));
 }
-run().catch(error=>{console.error(String(error));console.error(output.slice(-1800));process.exitCode=1;}).finally(async()=>{await quit();fixture.close();});
+run().catch(async error=>{console.error(String(error));try{console.error('Owned QA diagnostics:',JSON.stringify(await page.evaluate(`window.electronAPI.aiCommand({op:'state'}).then(r=>({tasks:r.state.tasks.map(t=>({state:t.state,error:t.error,result:t.result,steps:t.steps})),address:document.querySelector('.null-omnibox input')?.value,tabs:[...document.querySelectorAll('[data-tab-id]')].map(t=>({id:t.dataset.tabId,active:t.dataset.active,title:t.textContent}))}))`)));}catch{}console.error(output.slice(-1800));process.exitCode=1;}).finally(async()=>{await quit();fixture.close();});

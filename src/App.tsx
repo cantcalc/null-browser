@@ -1055,7 +1055,8 @@ export const App: React.FC = () => {
       handleNewTab(data.url, { select: data.active, id: data.id, workspaceId: data.workspaceId });
     });
     const aiCreated = api.onAITabCreated((data) => {
-      handleNewTab(data.url, { select: false, id: data.id, workspaceId: data.workspaceId });
+      if (data.active && data.workspaceId !== activeWorkspaceIdRef.current) handleSelectWorkspace(data.workspaceId);
+      handleNewTab(data.url, { select: data.active, id: data.id, workspaceId: data.workspaceId });
     });
     const aiSelectedText = api.onAISelection((data) => {
       if (data.workspaceId !== activeWorkspaceIdRef.current) return;

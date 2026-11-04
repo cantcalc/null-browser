@@ -1,0 +1,126 @@
+{
+  "date": "2026-11-04",
+  "timezone": "Asia/Seoul",
+  "version": "1.1.0-beta.2",
+  "nativeGroups": 22,
+  "nativeChecks": [
+    "URL/protocol/private-IP rejection and sensitive text redaction",
+    "free pricing parser excludes Priority/Batch paid models and later tables",
+    "provider-specific quota detection, no fallback for auth/network/server/credit/capacity",
+    "UTF-8/CRLF split-chunk streaming parser",
+    "mock Gemini model/image/SSE/function schema and thought-signature continuation",
+    "real WebContentsView extraction excludes values/hidden/editable/scripts/email and isolates control world",
+    "bounded JPEG screenshot with input/sensitive-text masks",
+    "login/password pages blocked for page/image analysis",
+    "important clicks require explicit approval; denial does not execute",
+    "real search-input fill/scroll; arbitrary script/unselected tab/private URL blocked",
+    "changed DOM fingerprint pauses instead of clicking a stale target",
+    "actual public React document navigation and Google search (no AI provider)",
+    "real async OS safeStorage roundtrip, ciphertext-only file, workspace isolation and key deletion",
+    "simulated unavailable OS encryption refuses storage; no plaintext fallback",
+    "mock official-format API model list/stream; paid selection rejected; no idle requests or persisted messages",
+    "mock quota fallback order; never paid; auth/overload stop without switching",
+    "agent navigation commits URL/title/layout and shows an actual native page, not New Tab",
+    "mock tool roundtrip + real dedicated native tab, cancellation, duplicate prevention and cleanup",
+    "model narration without real browser evidence is not shown or marked complete",
+    "agent login pause and explicit resume after a manual page change",
+    "two independent agents, same-tab lock, max-two limit and individual stop",
+    "close/reopen service clears conversation but restores settings and encrypted connections"
+  ],
+  "sourceUI": {
+    "ok": true,
+    "packaged": false,
+    "runtimeLaunch": "direct executable",
+    "mockUIRoundtrip": {
+      "requests": 9,
+      "cancelled": 1,
+      "pending": 0,
+      "mockTransport": true,
+      "mockOSStorage": true
+    },
+    "vaultPersistence": {
+      "encryptedFile": true,
+      "mode": "0600",
+      "decryptedAfterRestart": true,
+      "realOSStorage": false
+    },
+    "foregroundAgentPage": true,
+    "agentOnlySidebar": true,
+    "verifiedResult": true,
+    "unverifiedCompletionRejected": true,
+    "privateBlocked": true,
+    "restartPersistence": true,
+    "layouts": 6
+  },
+  "packagedUI": {
+    "ok": true,
+    "packaged": true,
+    "runtimeLaunch": "macOS LaunchServices",
+    "mockUIRoundtrip": {
+      "requests": 9,
+      "cancelled": 1,
+      "pending": 0,
+      "mockTransport": true,
+      "mockOSStorage": false
+    },
+    "vaultPersistence": {
+      "encryptedFile": true,
+      "mode": "0600",
+      "decryptedAfterRestart": true,
+      "realOSStorage": true
+    },
+    "foregroundAgentPage": true,
+    "agentOnlySidebar": true,
+    "verifiedResult": true,
+    "unverifiedCompletionRejected": true,
+    "privateBlocked": true,
+    "restartPersistence": true,
+    "layouts": 6
+  },
+  "packageIntegrity": {
+    "version": "1.1.0-beta.2",
+    "matchedFiles": 14,
+    "asarSha256": "4d34ec751fb3a241425dedeb61052aca3cc62d2e3dcd46cb98b375d75fcab48c",
+    "QAExcluded": true,
+    "signatureIntegrity": true,
+    "signing": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "developerIdSigned": false,
+      "localAdHocOnly": true,
+      "gatekeeperAccepted": false,
+      "notarized": false
+    }
+  },
+  "liveGemini": {
+    "verified": true,
+    "modelDisplayName": "Gemini 3.5 Flash Lite",
+    "request": "유튜브 켜줘",
+    "nativePage": "https://www.youtube.com/",
+    "nativeTitle": "YouTube",
+    "addressBar": "www.youtube.com",
+    "reply": "유튜브를 켰습니다.",
+    "completionAfterVerification": true,
+    "method": "Native UI using existing connection; no inspector or mock in the user profile; API key was not read or copied"
+  },
+  "limits": [
+    "Only one real Gemini navigation flow verified; other providers/quota/image/complex tasks still unverified.",
+    "A restart-connection QA assertion failed once before the same build passed; underlying reason not established.",
+    "Ad-hoc only; Developer ID/notarization unavailable."
+  ],
+  "regressions": {
+    "typeScript": "passed",
+    "electronTypecheck": "passed",
+    "build": "passed",
+    "navigation": "passed",
+    "tabs20Lifecycle": "passed",
+    "lightweight12": "passed"
+  },
+  "distribution": {
+    "macPreview": true,
+    "windows": false,
+    "dmg": false,
+    "publicRelease": false,
+    "installedDailyAppReplaced": false
+  }
+}

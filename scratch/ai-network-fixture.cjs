@@ -17,7 +17,7 @@ exports.install = ({ mockOSStorage = true } = {}) => {
       return { result: Buffer.concat([decipher.update(data.subarray(28)),decipher.final()]).toString('utf8'), shouldReEncrypt: false };
     };
   }
-  let requests = 0, cancelled = 0;
+  let requests = 0, cancelled = 0, pending = 0;
   global.fetch = async (url, options = {}) => {
     const address = String(url);
     if (!['https://api.groq.com/', 'https://console.groq.com/', 'https://openrouter.ai/'].some(origin => address.startsWith(origin))) throw Error('QA fixture rejected unexpected network destination');
@@ -35,16 +35,18 @@ exports.install = ({ mockOSStorage = true } = {}) => {
     return new Response(new ReadableStream({ start(controller) {
       let ended = false;
       const send = value => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`));
-      const finish = () => { if (!ended) { ended = true; controller.close(); } };
+      pending++;
+      const finish = () => { if (!ended) { ended = true; pending--; controller.close(); } };
       const timers = [];
-      if (agent) { send({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'qa-read', function: { name: 'read_page', arguments: '{}' } }] } }] }); finish(); }
+    if (String(user).includes('narration-only-fixture')) { send({choices:[{delta:{content:'도구 없이 열었다고 주장하는 잘못된 응답'}}]}); finish(); }
+    else if (agent) { send({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'qa-read', function: String(user).includes('open-page-fixture') ? {name:'navigate',arguments:JSON.stringify({url:'https://example.com/'})} : { name: 'read_page', arguments: '{}' } }] } }] }); finish(); }
       else {
         send({ choices: [{ delta: { content: text.slice(0, 20) } }] });
         if (!slow) timers.push(setTimeout(() => { if (!ended) { send({ choices: [{ delta: { content: text.slice(20) } }] }); finish(); } }, 400));
       }
-      options.signal?.addEventListener('abort', () => { if (!ended) { cancelled++; ended = true; for (const timer of timers) clearTimeout(timer); controller.error(Error('QA request cancelled')); } }, { once: true });
+      options.signal?.addEventListener('abort', () => { if (!ended) { cancelled++; pending--; ended = true; for (const timer of timers) clearTimeout(timer); controller.error(Error('QA request cancelled')); } }, { once: true });
     } }), { headers: { 'content-type': 'text/event-stream' } });
   };
-  global.__nullAIQAMetrics = () => ({ requests, cancelled, mockTransport: true, mockOSStorage });
+  global.__nullAIQAMetrics = () => ({ requests, cancelled, pending, mockTransport: true, mockOSStorage });
   return true;
 };

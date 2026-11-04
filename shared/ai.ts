@@ -23,6 +23,7 @@ export interface AIApproval { id: string; action: string; target: string; detail
 export interface AITask {
   id: string; kind: 'chat' | 'agent'; state: 'running' | 'approval' | 'login' | 'paused' | 'done' | 'cancelled' | 'error';
   title: string; tabId?: string; model: string; steps: string[]; approval?: AIApproval; error?: string;
+  result?: { tabId: string; title: string; url: string };
 }
 export interface AIState {
   settings: AISettings; connections: AIConnection[]; models: AIModel[];

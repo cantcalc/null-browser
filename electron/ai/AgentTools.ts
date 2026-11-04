@@ -1,7 +1,7 @@
 import type { WebContents } from 'electron';
 import type { ToolDefinition, ToolCall } from './Providers';
 import { PageContext, type PageSnapshot } from './PageContext';
-import { consequential, isAgentURL, publicURL, redact, requirePublicAgentURL, riskyNavigation } from './Policy';
+import { consequential, isAgentURL, publicURL, redact, requirePublicAgentURL, riskyNavigation, requestedHomepage, requestedDestination } from './Policy';
 
 const schema = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
 export const AGENT_TOOLS: ToolDefinition[] = [
@@ -18,6 +18,7 @@ export interface AgentEnvironment {
   targetId: string; allowed: Set<string>; signal: AbortSignal;
   contents: (id: string) => WebContents;
   prepare?: (id: string) => Promise<WebContents>;
+  navigate: (url: string) => Promise<void>;
   searchURL: (query: string) => string;
   approve: (action: string, target: string, detail: string) => Promise<boolean>;
   pause: (reason: 'login' | 'paused', description: string) => Promise<void>;
@@ -29,6 +30,7 @@ export class AgentTools {
   private links = new Set<string>();
   private entered: string[] = [];
   private denied = new Set<string>();
+  private observed = new Map<string, { tabId: string; title: string; url: string }>();
   constructor(private pages: PageContext, private env: AgentEnvironment) { this.baselineURL = env.contents(env.targetId).getURL(); }
   private target(id = this.env.targetId) {
     this.env.signal.throwIfAborted();
@@ -51,7 +53,7 @@ export class AgentTools {
     const wc = this.env.prepare ? await this.env.prepare(id) : owned;
     await this.settled(wc);
     this.env.signal.throwIfAborted();
-    if (!/^https?:/.test(wc.getURL())) return { tabId: id, message: '새 작업 탭입니다. search 또는 navigate 도구로 시작하세요.' };
+    if (!/^https?:/.test(wc.getURL())) { this.observed.delete(id); return { tabId: id, message: '새 작업 탭입니다. search 또는 navigate 도구로 시작하세요.' }; }
     const snapshot = await this.pages.snapshot(wc);
     if (snapshot.sensitive) {
       await this.env.pause(snapshot.login ? 'login' : 'paused', snapshot.login ? '로그인이 필요합니다. 작업 탭에서 직접 로그인한 뒤 재개하세요.' : '민감한 페이지입니다. 직접 작업한 뒤 다른 페이지에서 재개하세요.');
@@ -60,7 +62,23 @@ export class AgentTools {
     if (id === this.env.targetId) this.last = snapshot;
     for (const item of snapshot.elements) if (item.href && isAgentURL(item.href) && redact(item.href) === item.href) this.links.add(item.href);
     while (this.links.size > 200) this.links.delete(this.links.values().next().value!);
+    if (snapshot.text.trim() || snapshot.elements.length) this.observed.set(id, { tabId: id, title: snapshot.title, url: publicURL(snapshot.url) });
+    else this.observed.delete(id);
     return { tabId: id, ...this.pages.external(snapshot, true) };
+  }
+  get hasEvidence() {
+    const goal = requestedDestination(this.env.userRequest);
+    if (!goal) return this.observed.size > 0;
+    const result = this.observed.get(this.env.targetId);
+    if (!result) return false;
+    const url = new URL(result.url), host = url.hostname.replace(/^www\./,'');
+    return (host === goal.hostname || host.endsWith('.'+goal.hostname)) && (goal.pathname === '/' || url.pathname.replace(/\/$/,'') === goal.pathname.replace(/\/$/,''));
+  }
+  async verifyResult() {
+    if (!this.hasEvidence) return undefined;
+    const id = this.observed.has(this.env.targetId) ? this.env.targetId : [...this.observed.keys()].at(-1)!;
+    await this.observe(id);
+    return this.hasEvidence ? this.observed.get(id) : undefined;
   }
   private async validate() {
     if (!this.last) throw Error('먼저 작업 탭을 읽어야 합니다.');
@@ -94,17 +112,18 @@ export class AgentTools {
           const terms = new Set<string>([...(this.env.userRequest.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []), 'official', 'docs', 'documentation', 'guide', 'site', 'dev', 'com', 'org', 'www', '공식', '문서', '사용법']);
           const unknown = (value.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(word => word.length > 1 && !terms.has(word));
           if (unknown.length && !await this.env.approve('검색어 확인', publicURL(url), `요청에 없던 단어가 포함됩니다: ${value}`)) return '사용자가 검색어를 거부했습니다. 반복하지 마세요.';
-        } else if (!this.links.has(url) && !this.env.userRequest.includes(url)) {
+        } else if (!this.links.has(url) && !this.env.userRequest.includes(url) && !requestedHomepage(url, this.env.userRequest)) {
           if (!await this.env.approve('새 웹주소 확인', publicURL(url), `요청이나 읽은 링크에 없는 주소입니다: ${url}`)) return '사용자가 새 주소 이동을 거부했습니다. 반복하지 마세요.';
         }
         if (call.name !== 'search' && riskyNavigation(url) && !await this.env.approve('주소 이동', publicURL(url), url.slice(0, 2000))) return '사용자가 이동을 거부했습니다. 같은 작업을 반복하지 마세요.';
         const wc = this.target();
         this.last = undefined;
+        this.observed.delete(this.env.targetId);
         // A current-tab run must not blindly navigate after user interaction.
         // The service revalidates the last observation for all DOM actions.
         const cancel = () => { if (!wc.isDestroyed() && wc.isLoadingMainFrame()) wc.stop(); };
         this.env.signal.addEventListener('abort', cancel, { once: true });
-        try { await wc.loadURL(url).catch(error => { if (error?.code !== 'ERR_ABORTED') throw Error('작업 페이지를 불러오지 못했습니다.'); }); }
+        try { await this.env.navigate(url); }
         finally { this.env.signal.removeEventListener('abort', cancel); }
         this.env.signal.throwIfAborted();
         return JSON.stringify(await this.observe());
@@ -139,7 +158,7 @@ export class AgentTools {
             // Do not let a page-created popup silently expand the task scope.
             await requirePublicAgentURL(element.href, this.env.signal);
             this.env.signal.throwIfAborted();
-            await wc.loadURL(element.href);
+            await this.env.navigate(element.href);
           } else await this.pages.operation(wc, 'click', { ...expected, id });
         }
       }
