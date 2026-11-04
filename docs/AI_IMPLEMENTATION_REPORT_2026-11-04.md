@@ -97,6 +97,7 @@
 - 중요/불확실 작업 승인, 입력한 내용 표시, 거부 반복 차단, protocol/public DNS 사전 확인과 현재 상태 재검증.
 - 모델/페이지 출력이 임의 JS·셸·파일·쿠키 도구를 생성하지 못함. Prompt injection의 완전한 방지 또는 포괄적인 보안 인증은 아님.
 - gitleaks 소스 검사에서 탐지된 secret 없음. 배포 의존성 npm audit 결과 0건. 개발/빌드 도구의 기존 권고는 별도입니다.
+- 첫 GitHub CI는 보고서에 넣은 검사 로그 SHA-256 두 개를 API 키로 오탐하여 중단됐습니다. 실제 로그 해시와 일치함을 확인하고, 해당 과거 커밋/파일/줄 두 개의 fingerprint만 `.gitleaksignore`에 지정했습니다. 보고서 해시 표현도 정리했습니다. 규칙 전체나 파일 전체를 제외하지 않고 Git 기록을 보존했습니다.
 
 기존 키체인 항목/보안 속성/인증서를 삭제하거나, Gatekeeper·암호화·샌드박스·TLS를 약화시키지 않았습니다.
 
@@ -149,8 +150,9 @@
 - 새 개발 버전은 1.1.0-beta.1. 기존 공개 버전과 구분합니다.
 - 실제 맥 ARM64 앱과 로컬 ad-hoc 무결성 검사를 완료했습니다. ASAR의 14개 UI/메인 빌드 파일과 현재 빌드의 해시 일치, 기존 아이콘·업데이트 provider 일치, QA fixture 제외를 확인했습니다. 상세 증거는 `docs/ai/VERIFICATION_2026-11-04.json`과 로컬 `tmp/ai-qa/`에 있습니다.
 - 소스만 관리하며 installer/QA 프로필/키 파일은 Git에 넣지 않습니다. 업데이트 provider는 cantcalc/null-browser를 유지합니다.
+- AI 소스·테스트·보고서를 `cantcalc/null-browser`의 `main`에 커밋·push했습니다. GitHub Actions의 main 검사는 TypeScript/빌드/의존성 검사이며, 맥 패키지 AI 검사는 태그/수동 빌드에 연결됩니다. 실제 API 키는 CI에 넣지 않습니다.
 - 기존 Aero 저장소/Release와 설치된 개인 브라우저 데이터를 변경하지 않았습니다.
-- Mac 전용 CI에 AI native/모의 UI 검사를 연결했습니다. 실제 API 키를 CI에 넣지 않습니다.
+- Mac 전용 CI에 AI native/실제 OS vault + 모의 provider UI 검사를 연결했습니다.
 - 이 버전의 태그·DMG·Windows EXE·새 공개 Release는 생성/게시하지 않습니다.
 
 남은 확인은 일관된 배포 서명/공증, 앱의 안전한 입력창을 통한 사용자 키 연결, 그 키로 실제 모델/한도/이미지/외부 에이전트 E2E입니다. 키를 채팅이나 소스에 전달할 필요는 없습니다.

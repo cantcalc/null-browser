@@ -1,0 +1,5 @@
+# Exactly two reviewed false positives in the original verification report:
+# SHA-256 digests of secrets.log/history-secrets.log, verified against the files.
+# No credentials or whole-file/rule exceptions. Keep complete history intact.
+751c0aae3c6e87818031106ecb6d4b996dc0aa99:docs/ai/VERIFICATION_2026-11-04.json:generic-api-key:511
+751c0aae3c6e87818031106ecb6d4b996dc0aa99:docs/ai/VERIFICATION_2026-11-04.json:generic-api-key:512

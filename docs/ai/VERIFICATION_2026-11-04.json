@@ -473,7 +473,7 @@
   "security": {
     "sourceSecretFindings": 0,
     "gitHistorySecretFindings": 0,
-    "gitHistoryCommitsScanned": 30,
+    "gitHistoryCommitsScanned": 31,
     "productionAuditVulnerabilities": {
       "info": 0,
       "low": 0,
@@ -483,7 +483,13 @@
       "total": 0
     },
     "keychainACLChanged": false,
-    "plaintextFallback": false
+    "plaintextFallback": false,
+    "reviewedFalsePositives": {
+      "count": 2,
+      "kind": "SHA-256 of scanner log files; exact historical commit/file/line fingerprints only",
+      "ignoreFile": ".gitleaksignore"
+    },
+    "historyScanScope": "31 commits at 751c0aa with exactly two reviewed SHA-256 false-positive fingerprints; subsequent documentation commit checked separately."
   },
   "limitations": [
     "No valid user API credential was supplied; successful live generation, actual quota fallback, live image understanding and natural-language external-site agent E2E remain unverified.",
@@ -501,22 +507,70 @@
     "installedDailyAppReplaced": false,
     "readyForStableAIRelease": false
   },
-  "localLogSHA256": {
-    "tmp/ai-qa/final-renderer-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tmp/ai-qa/final-electron-types.log": "6b8f40974914c225dd7d90040e56d2733936b15062e883b5a021448fde6ac58b",
-    "tmp/ai-qa/package-mac.log": "ec4ee2371181edd6381ded93c00cbf39ff696887d8416d0366d67077f4864378",
-    "tmp/ai-qa/native.log": "35e760142851976ee3520653197094863ec12127cecd632ce874d062d925a295",
-    "tmp/ai-qa/ui-source.log": "16f543e187d479d00f4921768c36af4781ef4778a074ad223af673ecd22bd521",
-    "tmp/ai-qa/ui-packaged.log": "a5344a0aea8dcc2c3e154f244cba17b1ccbeda738609006acc8a6a74ab394cd0",
-    "tmp/ai-qa/secrets.log": "3d2014b047c917a391939060173a54ec9d05900e87799c61cb097a78dc59d27b",
-    "tmp/ai-qa/history-secrets.log": "89976b4fc28b4bdd90899c7a71c9d1a4b5327d3058a946f59aef2eacf2a28e29",
-    "tmp/ai-qa/regression-navigation.log": "d5a9afeecc90052fef0f6005252afef264ad7ccc99a3a1abca5a4d374e5a9eac",
-    "tmp/ai-qa/regression-tabs.log": "fd4cd2c42da4f650e89a1f78e0c9db0ba52e2a872f7baf0e5cbd38ee5f9a75cf",
-    "tmp/ai-qa/regression-core.log": "c29e77040412167454141b25363eced2cfb610ad030a149e9cf23ba0462899f1",
-    "tmp/ai-qa/regression-runtime.log": "50a7f6b8a1203cfd1640595fb6bc0c5bb11033d45ae4eeaab02fa81982701944",
-    "tmp/ai-qa/regression-lightweight.log": "9b8e84f8a00d7e2083e1e7be7e2213658618b59701bb7ea89cdb9b833c2e4d6f",
-    "tmp/ai-qa/regression-workspaces.log": "76871f8120439be4363c9416a219cc55dcd6469b3426ef9122dcba302711f6ac",
-    "tmp/ai-qa/regression-extensions.log": "44b0624f68415b41346046c98c6e9f1a9574550cc03f82c598af2d6a027ada2a",
-    "tmp/ai-qa/regression-settings.log": "293b61785e9fa3d7b624266be10774424a34345ca9dce29784203744f7999a4d"
-  }
+  "localLogs": [
+    {
+      "path": "tmp/ai-qa/final-renderer-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/ai-qa/final-electron-types.log",
+      "sha256": "6b8f40974914c225dd7d90040e56d2733936b15062e883b5a021448fde6ac58b"
+    },
+    {
+      "path": "tmp/ai-qa/package-mac.log",
+      "sha256": "ec4ee2371181edd6381ded93c00cbf39ff696887d8416d0366d67077f4864378"
+    },
+    {
+      "path": "tmp/ai-qa/native.log",
+      "sha256": "35e760142851976ee3520653197094863ec12127cecd632ce874d062d925a295"
+    },
+    {
+      "path": "tmp/ai-qa/ui-source.log",
+      "sha256": "16f543e187d479d00f4921768c36af4781ef4778a074ad223af673ecd22bd521"
+    },
+    {
+      "path": "tmp/ai-qa/ui-packaged.log",
+      "sha256": "a5344a0aea8dcc2c3e154f244cba17b1ccbeda738609006acc8a6a74ab394cd0"
+    },
+    {
+      "path": "tmp/ai-qa/secrets.log",
+      "sha256": "3d2014b047c917a391939060173a54ec9d05900e87799c61cb097a78dc59d27b"
+    },
+    {
+      "path": "tmp/ai-qa/history-secrets.log",
+      "sha256": "e094888a0be1ae1ecc6febb0735129cb9fdb5c735d8554fb91c391b5f57af9d8"
+    },
+    {
+      "path": "tmp/ai-qa/regression-navigation.log",
+      "sha256": "d5a9afeecc90052fef0f6005252afef264ad7ccc99a3a1abca5a4d374e5a9eac"
+    },
+    {
+      "path": "tmp/ai-qa/regression-tabs.log",
+      "sha256": "fd4cd2c42da4f650e89a1f78e0c9db0ba52e2a872f7baf0e5cbd38ee5f9a75cf"
+    },
+    {
+      "path": "tmp/ai-qa/regression-core.log",
+      "sha256": "c29e77040412167454141b25363eced2cfb610ad030a149e9cf23ba0462899f1"
+    },
+    {
+      "path": "tmp/ai-qa/regression-runtime.log",
+      "sha256": "50a7f6b8a1203cfd1640595fb6bc0c5bb11033d45ae4eeaab02fa81982701944"
+    },
+    {
+      "path": "tmp/ai-qa/regression-lightweight.log",
+      "sha256": "9b8e84f8a00d7e2083e1e7be7e2213658618b59701bb7ea89cdb9b833c2e4d6f"
+    },
+    {
+      "path": "tmp/ai-qa/regression-workspaces.log",
+      "sha256": "76871f8120439be4363c9416a219cc55dcd6469b3426ef9122dcba302711f6ac"
+    },
+    {
+      "path": "tmp/ai-qa/regression-extensions.log",
+      "sha256": "44b0624f68415b41346046c98c6e9f1a9574550cc03f82c598af2d6a027ada2a"
+    },
+    {
+      "path": "tmp/ai-qa/regression-settings.log",
+      "sha256": "293b61785e9fa3d7b624266be10774424a34345ca9dce29784203744f7999a4d"
+    }
+  ]
 }
