@@ -105,7 +105,7 @@ export class DownloadManager {
 
   public openDownload(id: string, targetSession?: Electron.Session) {
     const entry = this.downloads.get(id);
-    if (entry && (!targetSession || entry.session === targetSession) && entry.info.savePath) {
+    if (entry && (!targetSession || entry.session === targetSession) && entry.info.state === 'completed' && entry.info.savePath) {
       shell.openPath(entry.info.savePath);
     }
   }

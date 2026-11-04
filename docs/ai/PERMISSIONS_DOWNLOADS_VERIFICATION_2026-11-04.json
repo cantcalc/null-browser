@@ -1,0 +1,311 @@
+{
+  "date": "2026-11-04",
+  "version": "1.1.0-beta.3",
+  "native": {
+    "ok": true,
+    "checks": [
+      "URL/protocol/private-IP rejection and sensitive text redaction",
+      "routine URL/query/control authorization; consequential, ambiguous and write-form confirmation",
+      "free pricing parser excludes Priority/Batch paid models and later tables",
+      "provider-specific quota detection, no fallback for auth/network/server/credit/capacity",
+      "UTF-8/CRLF split-chunk streaming parser",
+      "mock Gemini model/image/SSE/function schema and thought-signature continuation",
+      "real WebContentsView extraction excludes values/hidden/editable/scripts/email and isolates control world",
+      "bounded JPEG screenshot with input/sensitive-text masks",
+      "login/password pages blocked for page/image analysis",
+      "important clicks require explicit approval; denial does not execute",
+      "real ordinary editor fill and UI click execute without approval, even when approval would be denied",
+      "real GET search submits automatically; denied POST form never executes",
+      "real search-input fill/scroll; arbitrary script/unselected tab/private URL blocked",
+      "changed DOM re-observes automatically without executing a stale click or asking to resume",
+      "actual trusted user input still pauses automatic agent actions",
+      "actual public React document navigation and Google search (no AI provider)",
+      "real async OS safeStorage roundtrip, ciphertext-only file, workspace isolation and key deletion",
+      "simulated unavailable OS encryption refuses storage; no plaintext fallback",
+      "mock official-format API model list/stream; paid selection rejected; no idle requests or persisted messages",
+      "mock quota fallback order; never paid; auth/overload stop without switching",
+      "agent navigation commits URL/title/layout and shows an actual native page, not New Tab",
+      "mock tool roundtrip + real dedicated native tab, cancellation, duplicate prevention and cleanup",
+      "model narration without real browser evidence is not shown or marked complete",
+      "agent login pause and explicit resume after a manual page change",
+      "two independent agents, same-tab lock, max-two limit and individual stop",
+      "close/reopen service clears conversation but restores settings and encrypted connections"
+    ],
+    "liveBrowserNavigation": {
+      "ok": true
+    },
+    "providerTransport": "mock official schemas",
+    "realAsyncOSKeyEncryption": true
+  },
+  "packagedAI": {
+    "ok": true,
+    "layouts": [
+      {
+        "width": 800,
+        "height": 600,
+        "position": "right",
+        "chrome": {
+          "left": 440,
+          "right": 800,
+          "top": 121,
+          "bottom": 600,
+          "width": 360,
+          "height": 600,
+          "screenWidth": 800,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 440,
+          "height": 479
+        }
+      },
+      {
+        "width": 800,
+        "height": 600,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 600,
+          "width": 360,
+          "height": 600,
+          "screenWidth": 800,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 440,
+          "height": 479
+        }
+      },
+      {
+        "width": 1280,
+        "height": 720,
+        "position": "right",
+        "chrome": {
+          "left": 920,
+          "right": 1280,
+          "top": 121,
+          "bottom": 720,
+          "width": 360,
+          "height": 720,
+          "screenWidth": 1280,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 920,
+          "height": 599
+        }
+      },
+      {
+        "width": 1280,
+        "height": 720,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 720,
+          "width": 360,
+          "height": 720,
+          "screenWidth": 1280,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 920,
+          "height": 599
+        }
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "position": "right",
+        "chrome": {
+          "left": 1080,
+          "right": 1440,
+          "top": 121,
+          "bottom": 895,
+          "width": 360,
+          "height": 895,
+          "screenWidth": 1440,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 0,
+          "y": 121,
+          "width": 1080,
+          "height": 774
+        }
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "position": "left",
+        "chrome": {
+          "left": 0,
+          "right": 360,
+          "top": 121,
+          "bottom": 895,
+          "width": 360,
+          "height": 895,
+          "screenWidth": 1440,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "native": {
+          "x": 360,
+          "y": 121,
+          "width": 1080,
+          "height": 774
+        }
+      }
+    ],
+    "restartPersistence": true,
+    "vaultPersistence": {
+      "encryptedFile": true,
+      "mode": "0600",
+      "decryptedAfterRestart": true,
+      "realOSStorage": true
+    },
+    "mockTransport": true
+  },
+  "packagedDownloads": {
+    "realProgress": true,
+    "layouts": [
+      {
+        "theme": "noir",
+        "width": 800,
+        "height": 600,
+        "bounds": {
+          "left": 460,
+          "right": 800,
+          "bottom": 600,
+          "width": 800,
+          "height": 600,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "view": {
+          "x": 0,
+          "y": 121,
+          "width": 460,
+          "height": 479
+        }
+      },
+      {
+        "theme": "noir",
+        "width": 1280,
+        "height": 720,
+        "bounds": {
+          "left": 940,
+          "right": 1280,
+          "bottom": 720,
+          "width": 1280,
+          "height": 720,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "view": {
+          "x": 0,
+          "y": 121,
+          "width": 940,
+          "height": 599
+        }
+      },
+      {
+        "theme": "paper",
+        "width": 800,
+        "height": 600,
+        "bounds": {
+          "left": 460,
+          "right": 800,
+          "bottom": 600,
+          "width": 800,
+          "height": 600,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "view": {
+          "x": 0,
+          "y": 121,
+          "width": 460,
+          "height": 479
+        }
+      },
+      {
+        "theme": "paper",
+        "width": 1280,
+        "height": 720,
+        "bounds": {
+          "left": 940,
+          "right": 1280,
+          "bottom": 720,
+          "width": 1280,
+          "height": 720,
+          "overflow": false,
+          "panelOverflow": false
+        },
+        "view": {
+          "x": 0,
+          "y": 121,
+          "width": 940,
+          "height": 599
+        }
+      }
+    ],
+    "cancel": true,
+    "completeBytes": true,
+    "interrupted": true,
+    "privateIsolation": true,
+    "restartHistory": true,
+    "restoredOpenFinder": true,
+    "removeKeepsFile": true,
+    "removalPersists": true,
+    "ok": true,
+    "packaged": true,
+    "shellActionsIntercepted": true
+  },
+  "package": {
+    "version": "1.1.0-beta.3",
+    "matchedCompiledFiles": 14,
+    "qaFixturesExcluded": true,
+    "provider": "github:cantcalc/null-browser",
+    "asarSha256": "6a77fa90002a9439538914f5ee5569e5838d40763bada031a9228ccd16709a5f"
+  },
+  "publicRelease": "NOT PUBLISHED",
+  "windows": "DEFERRED",
+  "signing": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "developerIdSigned": false,
+    "localAdHocOnly": true,
+    "gatekeeperAccepted": false,
+    "notarized": false
+  },
+  "actualUserProfileUI": {
+    "provider": "Gemini",
+    "model": "Gemini 3.5 Flash Lite",
+    "request": "유튜브에서 NULL browser 검색해줘",
+    "observedURL": "https://www.youtube.com/results?search_query=NULL+browser",
+    "observedTitle": "NULL browser - YouTube",
+    "result": "페이지 확인 완료 + 실제 검색 결과 + 최종 답변",
+    "completedWithoutAdditionalApproval": true,
+    "inspectorOrCDPUsed": false,
+    "apiKeyReadOrCopied": false,
+    "initialConnectionFailureRecoveredOnRetry": true,
+    "initialFailureCause": "not established"
+  }
+}

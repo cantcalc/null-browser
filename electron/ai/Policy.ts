@@ -49,13 +49,28 @@ export async function requirePublicAgentURL(value: unknown, signal: AbortSignal)
   } finally { clearTimeout(timer!); }
   return value;
 }
-export const consequential = /(?:delete|remove|destroy|logout|signout|checkout|purchase|payment|buy|subscribe|send|submit|publish|post|comment|upload|transfer|save|confirm|authorize|connect|grant|revoke|follow|like|unlike|설정|저장|삭제|전송|보내|등록|구매|결제|게시|구독|동의|허용|좋아요)/i;
+export const consequential = /(?:\b(?:delete|remove|destroy|log\s*out|sign\s*out|checkout|purchase|payment|buy|subscribe|unsubscribe|send|publish|post|upload|transfer|save|authorize|connect|grant|revoke|follow|unfollow|like|unlike|allow|accept|install)\b|삭제|전송|보내|등록|구매|결제|게시|구독|동의|허용|좋아요|저장(?!소))/i;
 export function riskyNavigation(value: string) {
   try {
     const url = new URL(value);
-    return consequential.test(decodeURIComponent(url.pathname)) || /\.(?:exe|dmg|pkg|msi|zip|crx)(?:$|\/)/i.test(url.pathname) ||
-      [...url.searchParams.keys()].some(key => !/^(?:q|query|search|search_query|page|p|offset|limit|sort|order|filter|tab|lang|hl|ref|utm_.+)$/i.test(key));
+    const segments = decodeURIComponent(url.pathname).split(/[\/._-]+/);
+    return segments.some(segment => /^(?:delete|remove|destroy|logout|signout|checkout|purchase|payment|subscribe|unsubscribe|send|publish|authorize|grant|revoke|reset|삭제|결제|전송|허용)$/i.test(segment)) ||
+      /\.(?:exe|dmg|pkg|msi|zip|crx|sh|bat|cmd|ps1)(?:$|\/)/i.test(url.pathname) ||
+      [...url.searchParams.keys()].some(key => /^(?:action|op|operation|cmd|command|execute|delete|remove|destroy|update|save|send|submit|confirm|checkout|purchase|pay|logout|authorize|grant|revoke|token|password|secret|code)$/i.test(key));
   } catch { return true; }
+}
+
+export function requiresInteractionApproval(element: { label: string; href?: string; downloadName?: string; submit?: boolean; formMethod?: string; formAction?: string; searchControl?: boolean; context?: string; role?: string }) {
+  if (consequential.test(element.label)) return true;
+  if (element.href && riskyNavigation(element.href)) return true;
+  if (element.submit && element.formAction && riskyNavigation(element.formAction)) return true;
+  if (element.downloadName && /\.(?:exe|dmg|pkg|msi|zip|crx|sh|bat|cmd|ps1)$/i.test(element.downloadName)) return true;
+  // Search submits and ordinary UI controls are already authorized by the
+  // task. A generic write-form submission remains a distinct external action.
+  if (element.submit && element.formMethod !== 'get' && !element.searchControl) return true;
+  if (/^(?:ok|yes|confirm|continue|submit|done|proceed|확인|예|계속|완료|진행)(?:\s|$)/i.test(element.label.trim()) && !element.searchControl) return true;
+  if (/switch|checkbox/i.test(element.role || '') && /security|password|permission|privacy|2fa|two.factor|보안|비밀번호|권한|개인정보/i.test(element.context || '')) return true;
+  return !element.label.trim() && !element.searchControl;
 }
 
 // A named site's public landing page is already within a request mentioning

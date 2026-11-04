@@ -1,7 +1,7 @@
 import { nativeImage, type WebContents } from 'electron';
 import { isWebURL, publicURL, redact } from './Policy';
 
-export interface PageElement { id: number; tag: string; label: string; href?: string; inputType?: string; safeInput: boolean; download: boolean; fingerprint: string }
+export interface PageElement { id: number; tag: string; label: string; href?: string; inputType?: string; safeInput: boolean; download: boolean; downloadName?: string; role?: string; context: string; submit: boolean; formMethod?: string; formAction?: string; searchControl: boolean; fingerprint: string }
 export interface PageSnapshot {
   title: string; url: string; text: string; revision: number; interaction: number;
   elements: PageElement[]; sensitive: boolean; login: boolean;
@@ -26,11 +26,21 @@ function pageOperation(operation: string, args: any) {
     const el = element as HTMLInputElement;
     const tag = el.tagName.toLowerCase();
     const editable = tag === 'input' || tag === 'textarea' || (el as unknown as HTMLElement).isContentEditable;
-    const label = (el.getAttribute('aria-label') || (editable ? el.getAttribute('placeholder') || el.getAttribute('data-placeholder') || el.name || '텍스트 입력란' : (el as unknown as HTMLElement).innerText) || '').trim().slice(0, 160);
+    const labelledBy = (el.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean).slice(0,8).map(id => { const label = document.getElementById(id); return label && !label.closest(excluded) ? label.textContent?.slice(0,160) || '' : ''; }).join(' ');
+    const label = (el.getAttribute('aria-label') || labelledBy || el.getAttribute('title') || (editable ? el.getAttribute('placeholder') || el.getAttribute('data-placeholder') || el.name || '텍스트 입력란' : (el as unknown as HTMLElement).innerText || el.querySelector('svg title')?.textContent) || '').trim().slice(0, 160);
     const href = tag === 'a' ? (el as unknown as HTMLAnchorElement).href : undefined;
     const inputType = tag === 'input' ? el.type : tag === 'textarea' ? 'textarea' : (el as unknown as HTMLElement).isContentEditable ? 'contenteditable' : undefined;
     const safeInput = tag === 'input' && (el.type === 'search' || /^(?:q|query|search|search_query)$/i.test(el.name)) && !el.autocomplete?.match(/password|one-time|cc-|email|tel/);
-    return { tag, label, href, inputType, safeInput: Boolean(safeInput), download: el.hasAttribute('download'), fingerprint: JSON.stringify([tag, label, href, inputType, el.name, el.getAttribute('role'), el.getAttribute('aria-expanded'), el.getAttribute('download'), el.getAttribute('target'), el.getAttribute('formaction'), el.closest('form')?.getAttribute('action'), el.closest('form')?.getAttribute('method')]) };
+    const button = tag === 'button' ? el as unknown as HTMLButtonElement : undefined;
+    const form = button?.form || el.closest('form');
+    const dialog = el.closest('dialog,[role="dialog"]');
+    const heading = dialog?.querySelector('h1,h2,h3,[role="heading"]');
+    const context = [form?.getAttribute('aria-label'),form?.getAttribute('name'),dialog?.getAttribute('aria-label'),heading && !heading.closest(excluded) ? heading.textContent : ''].filter(Boolean).join(' ').slice(0,320);
+    const submit = button?.type === 'submit' && Boolean(form);
+    const formMethod = (button?.getAttribute('formmethod') || form?.method)?.toLowerCase();
+    const formAction = submit ? (button?.hasAttribute('formaction') ? button.formAction : form?.action) : undefined;
+    const searchControl = formMethod === 'get' && Array.from(form?.querySelectorAll('input[type="search"],input[name="q"],input[name="query"],input[name="search"],input[name="search_query"]') || []).some(visible) && !form?.querySelector('textarea,[contenteditable],input[type="password"],[autocomplete^="cc-"]');
+    return { tag, label, href, inputType, safeInput: Boolean(safeInput), download: el.hasAttribute('download'), downloadName: el.getAttribute('download') || undefined, role:el.getAttribute('role') || undefined, context, submit, formMethod, formAction, searchControl, fingerprint: JSON.stringify([tag, label, href, inputType, el.name, el.getAttribute('role'), el.getAttribute('aria-expanded'), el.getAttribute('download'), el.getAttribute('target'),formAction,formMethod,context,submit,searchControl]) };
   };
   if (operation === 'snapshot') {
     state.revision++; state.elements.clear();
@@ -66,11 +76,12 @@ function pageOperation(operation: string, args: any) {
     return { title: document.title.slice(0, 200), url: location.href, text, code, headings, revision: state.revision, interaction: state.interaction, elements, sensitive, login, viewport: { width: innerWidth, height: innerHeight }, masks };
   }
   if (sensitive) throw Error('LOGIN_OR_SENSITIVE');
-  if (state.revision !== args.revision || state.interaction !== args.interaction || location.href !== args.url) throw Error('PAGE_CHANGED');
+  if (state.interaction !== args.interaction) throw Error('USER_INTERACTION');
+  if (state.revision !== args.revision || location.href !== args.url) throw Error('PAGE_CHANGED');
   if (operation === 'validate') return true;
   if (operation === 'scroll') { window.scrollBy({ top: Math.max(-innerHeight * 2, Math.min(innerHeight * 2, args.amount)), behavior: 'instant' }); return true; }
   const record = state.elements.get(args.id);
-  if (!record?.element?.isConnected || descriptor(record.element).fingerprint !== record.fingerprint || !visible(record.element)) throw Error('PAGE_CHANGED');
+  if (!record?.element?.isConnected || descriptor(record.element).fingerprint !== record.fingerprint || !visible(record.element)) throw Error('ELEMENT_CHANGED');
   if (operation === 'inspect') return descriptor(record.element);
   if (operation === 'click') { record.element.click(); return true; }
   if (operation === 'type') {
@@ -101,7 +112,7 @@ export class PageContext {
   }
   async operation(contents: WebContents, operation: string, args: unknown = {}): Promise<any> {
     if (contents.isDestroyed() || !isWebURL(contents.getURL())) throw Error('일반 웹페이지에서만 사용할 수 있습니다.');
-    const code = `(()=>{try{return {ok:true,value:(${pageOperation.toString()})(${JSON.stringify(operation)},${JSON.stringify(args)})}}catch(error){const allowed=['LOGIN_OR_SENSITIVE','PAGE_CHANGED','SENSITIVE_INPUT','UNKNOWN_OPERATION'];return {ok:false,error:allowed.includes(error?.message)?error.message:'PAGE_OPERATION_FAILED'}}})()`;
+    const code = `(()=>{try{return {ok:true,value:(${pageOperation.toString()})(${JSON.stringify(operation)},${JSON.stringify(args)})}}catch(error){const allowed=['LOGIN_OR_SENSITIVE','PAGE_CHANGED','USER_INTERACTION','ELEMENT_CHANGED','SENSITIVE_INPUT','UNKNOWN_OPERATION'];return {ok:false,error:allowed.includes(error?.message)?error.message:'PAGE_OPERATION_FAILED'}}})()`;
     let timer: ReturnType<typeof setTimeout>;
     try {
       const result = await Promise.race([

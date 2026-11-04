@@ -10,7 +10,7 @@ import { AIService, type AIHost } from '../electron/ai/AIService';
 import { PageContext } from '../electron/ai/PageContext';
 import { AgentTools } from '../electron/ai/AgentTools';
 import { TabManager } from '../electron/TabManager';
-import { classifyProviderError, geminiFreeCatalog, groqFreeCatalog, isAgentURL, redact, requestedHomepage, requestedDestination } from '../electron/ai/Policy';
+import { classifyProviderError, geminiFreeCatalog, groqFreeCatalog, isAgentURL, redact, requestedHomepage, requestedDestination, riskyNavigation, requiresInteractionApproval } from '../electron/ai/Policy';
 import { modelKey, type AIState } from '../shared/ai';
 
 const root = process.cwd(), profile = mkdtempSync(join(tmpdir(), 'null-ai-native-'));
@@ -32,7 +32,7 @@ let liveBrowserNavigation: { ok: boolean; issue?: string } = { ok: false };
 const server = createServer((request, res) => {
   res.setHeader('content-type', 'text/html; charset=utf-8');
   if (request.url === '/login') { res.end('<input type="password" value="never-read-credential"><p>Login</p>'); return; }
-  res.end(`<!doctype html><html><head><title>AI owned fixture</title></head><body><main><h1>Visible document</h1><p>Explain this code and summarize this article.</p><p>private@example.com</p><input name="q" type="search" value="input-value-must-not-leak"><input autocomplete="one-time-code" type="text" value="secret-code"><textarea>hidden-textarea-value</textarea><p hidden>hidden-secret</p><div contenteditable="true">editable-secret</div><script>const scriptSecret='script-secret';</script><a href="https://example.com">Read more</a><button id="send" onclick="this.dataset.executed='yes'">Send message</button><button id="toggle" onclick="document.body.dataset.clicked='yes'">Toggle details</button></main><div style="height:3000px">More content</div></body></html>`);
+  res.end(`<!doctype html><html><head><title>AI owned fixture</title></head><body><main><h1>Visible document</h1><p>Explain this code and summarize this article.</p><p>private@example.com</p><input name="q" type="search" value="input-value-must-not-leak"><input autocomplete="one-time-code" type="text" value="secret-code"><textarea>hidden-textarea-value</textarea><p hidden>hidden-secret</p><div contenteditable="true">editable-secret</div><script>const scriptSecret='script-secret';</script><a href="https://example.com">Read more</a><button id="send" onclick="this.dataset.executed='yes'">Send message</button><button id="toggle" onclick="document.body.dataset.clicked='yes'">Toggle details</button><form method="get" action="/results" onsubmit="event.preventDefault();this.dataset.executed='yes'"><input name="query" type="search"><button id="safe-search">Search</button></form><form method="post" action="/preferences" onsubmit="event.preventDefault();this.dataset.executed='yes'"><button id="write-form">Apply changes</button></form></main><div style="height:3000px">More content</div></body></html>`);
 });
 async function run() {
   assert.equal(isAgentURL('file:///etc/passwd'), false); assert.equal(isAgentURL('http://0x7f000001/'), false); assert.equal(isAgentURL('https://user:pass@example.com/'), false);
@@ -45,6 +45,12 @@ async function run() {
   assert.equal(requestedDestination('유튜브 켜줘')?.hostname,'youtube.com');
   assert.equal(requestedDestination('유튜브와 구글을 비교해 줘'),undefined);
   check('URL/protocol/private-IP rejection and sensitive text redaction');
+  for (const url of ['https://www.youtube.com/watch?v=abc&list=xyz&pp=123', 'https://example.com/docs?view=grid&page=2', 'https://example.com/posts/123']) assert(!riskyNavigation(url),url);
+  for (const url of ['https://example.com/logout', 'https://example.com/delete-account', 'https://example.com/?action=remove', 'https://example.com/file.dmg']) assert(riskyNavigation(url),url);
+  for (const label of ['Toggle details', 'Open menu', 'Videos', 'PostgreSQL', '저장소']) assert(!requiresInteractionApproval({label}),label);
+  for (const element of [{label:'Send message'},{label:'결제'},{label:'Search and delete account',searchControl:true},{label:'Continue'},{label:''},{label:'Search',submit:true,formMethod:'get',searchControl:true,formAction:'https://example.com/delete'},{label:'Apply',submit:true,formMethod:'post'}]) assert(requiresInteractionApproval(element));
+  assert(!requiresInteractionApproval({label:'Search',submit:true,formMethod:'get',searchControl:true,formAction:'https://example.com/search'}));
+  check('routine URL/query/control authorization; consequential, ambiguous and write-form confirmation');
   const md = (id: string, free: boolean) => `## ${id} {% id="${id}" %}\n{% tab title="Standard" %}\n* Input price\n* ${free ? 'Free of charge' : 'Not available'}\n* $1\n* Output price\n* ${free ? 'Free of charge' : 'Not available'}\n{% /tab %}\n{% tab title="Priority" %}\n* Input price\n* Free of charge\n* Output price\n* Free of charge\n{% /tab %}\n`;
   assert.deepEqual([...geminiFreeCatalog(md('gemini-free', true) + md('gemini-paid', false))], ['gemini-free']);
   assert.deepEqual([...groqFreeCatalog('Free Plan Limits<table><tbody><tr><td><code>model-free</code></td><td>30</td></tr></tbody></table><table><tbody><tr><td>paid</td></tr></tbody></table>')], ['model-free']);
@@ -140,7 +146,25 @@ async function run() {
   const approvalsBeforeEditor = approvals;
   await tools.run({ id: 'type-editor', name: 'type_text', arguments: { elementId: editorId, text: 'Public test draft' } });
   assert.equal(await contents.executeJavaScript('document.querySelector("textarea").value'), 'Public test draft');
-  assert.equal(approvals, approvalsBeforeEditor + 1);
+  assert.equal(approvals, approvalsBeforeEditor);
+  const routine = JSON.parse(await tools.run({id:'routine-read',name:'read_page',arguments:{}}));
+  const toggleId = routine.headingsAndControls.find((e:any)=>e.label==='Toggle details').id;
+  allow = false;
+  await tools.run({id:'routine-click',name:'click',arguments:{elementId:toggleId}});
+  assert.equal(await contents.executeJavaScript('document.body.dataset.clicked'),'yes');
+  assert.equal(approvals,approvalsBeforeEditor,'Routine actions asked for approval');
+  await contents.executeJavaScript('delete document.body.dataset.clicked;true');
+  check('real ordinary editor fill and UI click execute without approval, even when approval would be denied');
+  const formObservation = JSON.parse(await tools.run({id:'forms-read',name:'read_page',arguments:{}}));
+  await tools.run({id:'search-submit',name:'click',arguments:{elementId:formObservation.headingsAndControls.find((e:any)=>e.label==='Search').id}});
+  assert.equal(await contents.executeJavaScript('document.querySelector("#safe-search").form.dataset.executed'),'yes');
+  assert.equal(approvals,approvalsBeforeEditor);
+  const writeObservation = JSON.parse(await tools.run({id:'write-read',name:'read_page',arguments:{}}));
+  const deniedWrite=await tools.run({id:'write-submit',name:'click',arguments:{elementId:writeObservation.headingsAndControls.find((e:any)=>e.label==='Apply changes').id}});
+  assert(deniedWrite.includes('거부'));
+  assert.equal(await contents.executeJavaScript('document.querySelector("#write-form").form.dataset.executed'),undefined);
+  assert.equal(approvals,approvalsBeforeEditor+1);
+  check('real GET search submits automatically; denied POST form never executes');
   await tools.run({ id: 'scroll', name: 'scroll', arguments: { pixels: 600 } });
   assert(await contents.executeJavaScript('scrollY>0'));
   await assert.rejects(() => tools.run({ id: 'bad', name: 'execute_javascript', arguments: { code: 'alert(1)' } }));
@@ -149,16 +173,26 @@ async function run() {
   check('real search-input fill/scroll; arbitrary script/unselected tab/private URL blocked');
   const staleObservation = JSON.parse(await tools.run({ id: 'stale-read', name: 'read_page', arguments: {} }));
   const staleId = staleObservation.headingsAndControls.find((e: any) => e.label === 'Toggle details').id;
-  await contents.executeJavaScript("document.querySelector('#toggle').textContent='Changed by user';true");
-  await tools.run({ id: 'stale-click', name: 'click', arguments: { elementId: staleId } });
-  assert.equal(await contents.executeJavaScript('document.body.dataset.clicked'), undefined); assert(pauses > 0);
-  check('changed DOM fingerprint pauses instead of clicking a stale target');
+  await contents.executeJavaScript("document.querySelector('#toggle').textContent='Changed by page';true");
+  const pausesBeforeRefresh=pauses;
+  const refreshedControl=await tools.run({ id: 'stale-click', name: 'click', arguments: { elementId: staleId } });
+  assert.equal(await contents.executeJavaScript('document.body.dataset.clicked'), undefined); assert.equal(pauses,pausesBeforeRefresh);assert(refreshedControl.includes('Changed by page'));
+  check('changed DOM re-observes automatically without executing a stale click or asking to resume');
+  win.show();win.focus();await delay(250);contents.focus();
+  await contents.executeJavaScript("document.addEventListener('pointerdown',e=>window.__qaTrustedInput=e.isTrusted,{once:true});true");
+  contents.sendInputEvent({type:'mouseDown',x:10,y:10,button:'left',clickCount:1});contents.sendInputEvent({type:'mouseUp',x:10,y:10,button:'left',clickCount:1});
+  await wait(()=>contents.executeJavaScript('window.__qaTrustedInput===true'),'native trusted pointer input');
+  await tools.run({id:'user-interrupted',name:'scroll',arguments:{pixels:100}});
+  assert(pauses>pausesBeforeRefresh,'Trusted manual interaction did not pause the agent');win.hide();
+  check('actual trusted user input still pauses automatic agent actions');
   try {
-    const publicTools = new AgentTools(pages, { ...env, userRequest: 'https://react.dev/reference/react/useEffect React useEffect', searchURL: query => 'https://www.google.com/search?q=' + encodeURIComponent(query), pause: async () => { throw Error('External site requires manual login/challenge'); } });
+    const approvalsBeforeNavigation = approvals;
+    const publicTools = new AgentTools(pages, { ...env, userRequest: '공개 문서 찾아줘', searchURL: query => 'https://www.google.com/search?q=' + encodeURIComponent(query), pause: async () => { throw Error('External site requires manual login/challenge'); } });
     const document = await publicTools.run({ id: 'live-doc', name: 'navigate', arguments: { url: 'https://react.dev/reference/react/useEffect' } });
     assert(document.includes('useEffect'));
     await publicTools.run({ id: 'live-search', name: 'search', arguments: { query: 'React useEffect' } });
     assert.equal(new URL(contents.getURL()).hostname, 'www.google.com');
+    assert.equal(approvals,approvalsBeforeNavigation,'New public URLs or synthesized query asked for approval');
     liveBrowserNavigation = { ok: true }; check('actual public React document navigation and Google search (no AI provider)');
   } catch { liveBrowserNavigation = { ok: false, issue: 'Public website networking, authentication or challenge prevented verification.' }; console.log('UNVERIFIED public browser navigation'); }
   await contents.loadURL(fixtureOrigin);

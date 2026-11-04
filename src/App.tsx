@@ -199,6 +199,7 @@ export const App: React.FC = () => {
 
   // 7. Utility panel and browser dialogs
   const [isAsideOpen, setIsAsideOpen] = useState(false);
+  const [asideMode, setAsideMode] = useState<'notes' | 'downloads'>('notes');
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [aiMounted, setAIMounted] = useState(false);
   const [aiSelection, setAISelection] = useState<{ token: string; prompt: string; revision: number } | null>(null);
@@ -877,9 +878,13 @@ export const App: React.FC = () => {
         .catch((error) => console.error('Failed to load history:', error));
       api.getSearchHistory().then((items) => { if (!cancelled) setSearchHistory(items || []); })
         .catch((error) => console.error('Failed to load search history:', error));
-      api.getDownloads().then((items) => { if (!cancelled) setDownloads(items || []); })
-        .catch((error) => console.error('Failed to load downloads:', error));
     }
+    // Private windows can reload their own in-memory downloads too. The main
+    // process restricts this response to the caller's temporary session.
+    api.getDownloads().then((items) => { if (!cancelled) setDownloads(previous => {
+      const liveIds = new Set(previous.map(item => item.id));
+      return [...previous, ...(items || []).filter(item => !liveIds.has(item.id))].sort((a, b) => b.startTime - a.startTime);
+    }); }).catch((error) => console.error('Failed to load downloads:', error));
 
     // Listen for download updates
     const unsubDownload = api.onDownloadUpdated((info) => {
@@ -1602,6 +1607,9 @@ export const App: React.FC = () => {
 
       {/* 3. Omnibox Toolbar with Site controls and zoom */}
       <AddressBar
+        downloads={downloads}
+        isDownloadsOpen={isAsideOpen && asideMode === 'downloads'}
+        onOpenDownloads={() => { setAsideMode('downloads'); setIsAsideOpen(true); setIsAIOpen(false); setIsSiteInfoOpen(false); }}
         isAIOpen={isAIOpen}
         onToggleAI={() => { setAIMounted(true); setIsAIOpen(value => !value); setIsAsideOpen(false); setIsSiteInfoOpen(false); }}
         isIncognito={isIncognito}
@@ -1774,6 +1782,8 @@ export const App: React.FC = () => {
         {/* Utility panel (Notes, Downloads) */}
         {!isIncognito && aiMounted && !isHtmlFullscreen && <React.Suspense fallback={null}><AISidebar key={activeWorkspaceId} workspaceId={activeWorkspaceId} tabs={workspaceTabs} activeTabId={activeTabId} open={isAIOpen} onClose={() => setIsAIOpen(false)} onSettings={() => { setIsAIOpen(false); handleOpenSettings('ai'); }} onShowTab={handleSelectTab} selection={aiSelection} /></React.Suspense>}
         <AsidePanel
+          activeMode={asideMode}
+          onModeChange={setAsideMode}
           isOpen={isAsideOpen}
           activeTab={activeTab}
           downloads={downloads}
@@ -1782,6 +1792,7 @@ export const App: React.FC = () => {
           onOpenDownload={(id) => window.electronAPI?.openDownload(id)}
           onShowDownloadInFinder={(id) => window.electronAPI?.showInFinder(id)}
           onCancelDownload={(id) => window.electronAPI?.cancelDownload(id)}
+          onRemoveDownload={(id) => { window.electronAPI?.removeDownload(id); setDownloads(items => items.filter(item => item.id !== id)); }}
         />
       </div>
 

@@ -1,7 +1,7 @@
 import type { WebContents } from 'electron';
 import type { ToolDefinition, ToolCall } from './Providers';
 import { PageContext, type PageSnapshot } from './PageContext';
-import { consequential, isAgentURL, publicURL, redact, requirePublicAgentURL, riskyNavigation, requestedHomepage, requestedDestination } from './Policy';
+import { isAgentURL, publicURL, redact, requirePublicAgentURL, riskyNavigation, requestedDestination, requiresInteractionApproval } from './Policy';
 
 const schema = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
 export const AGENT_TOOLS: ToolDefinition[] = [
@@ -9,7 +9,7 @@ export const AGENT_TOOLS: ToolDefinition[] = [
   { name: 'search', description: 'Search the public web in the task tab. Use only the user task, never private data, in a query.', parameters: schema({ query: { type: 'string' } }, ['query']) },
   { name: 'navigate', description: 'Navigate the task tab to a public HTTP(S) URL. Never navigate to local/private networks or authentication callback URLs.', parameters: schema({ url: { type: 'string' } }, ['url']) },
   { name: 'open_link', description: 'Open a link from the most recent page observation in the task tab.', parameters: schema({ elementId: { type: 'integer' } }, ['elementId']) },
-  { name: 'click', description: 'Click an element ID from the latest task-tab observation. Important or uncertain actions need explicit user approval.', parameters: schema({ elementId: { type: 'integer' } }, ['elementId']) },
+  { name: 'click', description: 'Click an element ID from the latest task-tab observation. Routine controls are automatic; consequential actions need user approval.', parameters: schema({ elementId: { type: 'integer' } }, ['elementId']) },
   { name: 'type_text', description: 'Fill a visible text/search input. Never enter credentials, payment or private data. Does not submit.', parameters: schema({ elementId: { type: 'integer' }, text: { type: 'string' } }, ['elementId', 'text']) },
   { name: 'scroll', description: 'Scroll the task page vertically by up to two viewports.', parameters: schema({ pixels: { type: 'number' } }, ['pixels']) },
 ];
@@ -27,7 +27,6 @@ export interface AgentEnvironment {
 export class AgentTools {
   private last?: PageSnapshot;
   private baselineURL: string;
-  private links = new Set<string>();
   private entered: string[] = [];
   private denied = new Set<string>();
   private observed = new Map<string, { tabId: string; title: string; url: string }>();
@@ -60,8 +59,6 @@ export class AgentTools {
       return this.observe(id);
     }
     if (id === this.env.targetId) this.last = snapshot;
-    for (const item of snapshot.elements) if (item.href && isAgentURL(item.href) && redact(item.href) === item.href) this.links.add(item.href);
-    while (this.links.size > 200) this.links.delete(this.links.values().next().value!);
     if (snapshot.text.trim() || snapshot.elements.length) this.observed.set(id, { tabId: id, title: snapshot.title, url: publicURL(snapshot.url) });
     else this.observed.delete(id);
     return { tabId: id, ...this.pages.external(snapshot, true) };
@@ -108,13 +105,6 @@ export class AgentTools {
         const url = call.name === 'search' ? this.env.searchURL(value) : value;
         if (!isAgentURL(url)) throw Error('에이전트는 공개 HTTP/HTTPS 주소로만 이동할 수 있습니다.');
         await requirePublicAgentURL(url, this.env.signal);
-        if (call.name === 'search') {
-          const terms = new Set<string>([...(this.env.userRequest.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []), 'official', 'docs', 'documentation', 'guide', 'site', 'dev', 'com', 'org', 'www', '공식', '문서', '사용법']);
-          const unknown = (value.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(word => word.length > 1 && !terms.has(word));
-          if (unknown.length && !await this.env.approve('검색어 확인', publicURL(url), `요청에 없던 단어가 포함됩니다: ${value}`)) return '사용자가 검색어를 거부했습니다. 반복하지 마세요.';
-        } else if (!this.links.has(url) && !this.env.userRequest.includes(url) && !requestedHomepage(url, this.env.userRequest)) {
-          if (!await this.env.approve('새 웹주소 확인', publicURL(url), `요청이나 읽은 링크에 없는 주소입니다: ${url}`)) return '사용자가 새 주소 이동을 거부했습니다. 반복하지 마세요.';
-        }
         if (call.name !== 'search' && riskyNavigation(url) && !await this.env.approve('주소 이동', publicURL(url), url.slice(0, 2000))) return '사용자가 이동을 거부했습니다. 같은 작업을 반복하지 마세요.';
         const wc = this.target();
         this.last = undefined;
@@ -140,18 +130,16 @@ export class AgentTools {
         const element = await this.pages.operation(wc, 'inspect', { ...expected, id });
         if (call.name === 'type_text') {
           if (typeof args.text !== 'string' || args.text.length > 2000 || redact(args.text) !== args.text) throw Error('민감한 정보 또는 너무 긴 입력은 직접 입력해 주세요.');
-          if (!element.safeInput && !await this.env.approve('텍스트 입력', publicURL(snapshot.url), `${element.label || '텍스트 입력란'}: ${args.text}`)) return '사용자가 입력을 거부했습니다. 반복하지 마세요.';
           await this.validate(); this.env.signal.throwIfAborted();
           await this.pages.operation(wc, 'type', { ...expected, id, text: args.text });
           this.entered = [...this.entered.slice(-2), `${element.label || '입력란'}: ${args.text}`];
         } else {
           if (element.href && redact(element.href) !== element.href) throw Error('인증 정보가 포함된 링크는 직접 열어 주세요.');
           if (element.tag === 'a' && !isAgentURL(element.href)) throw Error('에이전트는 공개 HTTP/HTTPS 링크만 열 수 있습니다.');
-          const safeLink = element.tag === 'a' && !element.download && isAgentURL(element.href) && !riskyNavigation(element.href) && !consequential.test(element.label);
           if (call.name === 'open_link' && (!element.href || !isAgentURL(element.href))) throw Error('공개 웹 링크만 열 수 있습니다.');
           const actionId = snapshot.url + ':' + element.fingerprint;
           if (this.denied.has(actionId)) return '이미 거부된 작업입니다. 반복하지 마세요.';
-          if (!safeLink && !await this.env.approve(call.name === 'open_link' ? '링크 열기' : '요소 클릭', publicURL(snapshot.url), `${element.label || element.tag}\n이 작업에서 입력한 내용: ${this.entered.join('\n') || '없음'}\n대상 페이지와 실제 영향을 직접 확인한 뒤 승인하세요.`)) { this.denied.add(actionId); return '사용자가 클릭을 거부했습니다. 반복하지 마세요.'; }
+          if (requiresInteractionApproval(element) && !await this.env.approve(call.name === 'open_link' ? '링크 열기' : '중요 작업 확인', publicURL(snapshot.url), `${element.label || '이름 없는 버튼'}\n이 작업에서 입력한 내용: ${this.entered.join('\n') || '없음'}\n대상 페이지와 실제 영향을 직접 확인한 뒤 승인하세요.`)) { this.denied.add(actionId); return '사용자가 클릭을 거부했습니다. 반복하지 마세요.'; }
           await this.validate(); this.env.signal.throwIfAborted();
           if (element.tag === 'a' && isAgentURL(element.href)) {
             // Keep target=_blank links inside the one authorized task tab.
@@ -166,7 +154,12 @@ export class AgentTools {
       return JSON.stringify(await this.observe());
     } catch (error) {
       this.env.signal.throwIfAborted();
-      if (/PAGE_CHANGED|LOGIN_OR_SENSITIVE/.test(String(error))) {
+      if (String(error) === 'Error: ELEMENT_CHANGED') {
+        // Dynamic sites replace controls after rendering. Never click a stale
+        // element, but re-observe it without treating that as a user decision.
+        return JSON.stringify({ notice: '화면의 요소가 갱신되어 클릭/입력을 실행하지 않았습니다. 아래 새 관찰의 요소 ID로 다시 판단하세요.', page: await this.observe() });
+      }
+      if (/PAGE_CHANGED|USER_INTERACTION|LOGIN_OR_SENSITIVE/.test(String(error))) {
         await this.env.pause('paused', '사용자가 페이지를 조작했거나 화면이 변경되었습니다. 확인 후 재개하세요.');
         return JSON.stringify(await this.observe());
       }

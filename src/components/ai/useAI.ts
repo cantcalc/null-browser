@@ -20,6 +20,9 @@ export function useAI(workspaceId: string, active = true, refreshSaved = false) 
     if (!active) return;
     let alive = true;
     setLoading(true);
+    // Opening the panel starts a fresh state read. A connection error from
+    // an earlier visit must not remain after Settings successfully reconnects.
+    setError('');
     void window.electronAPI?.aiCommand({ op: 'state' }, workspaceId).then(async result => {
       if (!alive) return;
       if (result.state) setState(result.state);

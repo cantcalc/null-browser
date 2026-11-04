@@ -1090,8 +1090,24 @@ function downloadSessionForSender(sender: Electron.WebContents, id: string): Ele
   return caller?.isPersistent() && owner?.isPersistent() ? owner : caller;
 }
 ipcMain.on('downloads:cancel', (event, id: string) => { const ses = downloadSessionForSender(event.sender, id); if (ses) downloadManager.cancelDownload(id, ses); });
-ipcMain.on('downloads:open', (event, id: string) => { const ses = downloadSessionForSender(event.sender, id); if (ses) downloadManager.openDownload(id, ses); });
-ipcMain.on('downloads:showInFinder', (event, id: string) => { const ses = downloadSessionForSender(event.sender, id); if (ses) downloadManager.showInFinder(id, ses); });
+function savedDownloadForSender(sender: Electron.WebContents, id: string) {
+  // Renderer input is only an ID. Resolve paths from our own normal-profile
+  // history; a private window must never read or open those records.
+  return typeof id === 'string' && getSessionForWebContents(sender)?.isPersistent()
+    ? dataManager.getDownloads().find(item => item.id === id) : undefined;
+}
+ipcMain.on('downloads:open', (event, id: string) => {
+  const ses = downloadSessionForSender(event.sender, id);
+  if (!ses) return;
+  if (downloadManager.getDownloadSession(id)) downloadManager.openDownload(id, ses);
+  else { const saved = savedDownloadForSender(event.sender, id); if (saved?.state === 'completed' && saved.savePath) void shell.openPath(saved.savePath); }
+});
+ipcMain.on('downloads:showInFinder', (event, id: string) => {
+  const ses = downloadSessionForSender(event.sender, id);
+  if (!ses) return;
+  if (downloadManager.getDownloadSession(id)) downloadManager.showInFinder(id, ses);
+  else { const saved = savedDownloadForSender(event.sender, id); if (saved?.savePath) shell.showItemInFolder(saved.savePath); }
+});
 ipcMain.on('downloads:remove', (event, id: string) => {
   const targetSession = downloadSessionForSender(event.sender, id);
   if (!targetSession) return;

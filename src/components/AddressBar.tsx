@@ -15,8 +15,9 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { SunglassesIcon } from './SunglassesIcon';
+import { DownloadButton } from './DownloadButton';
 import { isNewTabUrl, isSettingsUrl } from '../../shared/internalPages';
-import { Tab, SearchEngine } from '../types/browser';
+import { Tab, SearchEngine, DownloadItem } from '../types/browser';
 import { NavigationResult, parseNavigationInput } from '../utils/navigationParser';
 import { shortcutLabel } from '../utils/platform';
 
@@ -31,6 +32,9 @@ function compactAddress(value: string): string {
 }
 
 interface AddressBarProps {
+  downloads: DownloadItem[];
+  isDownloadsOpen: boolean;
+  onOpenDownloads: () => void;
   isAIOpen?: boolean;
   onToggleAI?: () => void;
   isIncognito?: boolean;
@@ -58,6 +62,9 @@ interface AddressBarProps {
 }
 
 export const AddressBar: React.FC<AddressBarProps> = ({
+  downloads,
+  isDownloadsOpen,
+  onOpenDownloads,
   isAIOpen = false,
   onToggleAI,
   isIncognito = false,
@@ -270,6 +277,7 @@ export const AddressBar: React.FC<AddressBarProps> = ({
 
       {/* Right Action Tools (High Density Icons) */}
       <div className="null-toolbar-actions flex items-center gap-0.5 flex-shrink-0">
+        <DownloadButton downloads={downloads} open={isDownloadsOpen} onClick={onOpenDownloads} />
         {!isIncognito && onToggleAI && <button type="button" className="null-icon-button" aria-label="NULL AI 열기" aria-pressed={isAIOpen} title="NULL AI" onClick={onToggleAI}><MessageSquare size={15} /></button>}
         <button type="button" onClick={onNewPrivateWindow}
           aria-label="새 시크릿 창" title={`새 시크릿 창 (${shortcutLabel('⌘⇧N', 'Ctrl+Shift+N')})`}

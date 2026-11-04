@@ -6,10 +6,13 @@ import {
   Link,
   Folder,
   File,
+  Trash2,
 } from 'lucide-react';
 import { Tab, DownloadItem } from '../types/browser';
 
 interface AsidePanelProps {
+  activeMode: 'notes' | 'downloads';
+  onModeChange: (mode: 'notes' | 'downloads') => void;
   isOpen: boolean;
   activeTab?: Tab;
   downloads: DownloadItem[];
@@ -17,10 +20,13 @@ interface AsidePanelProps {
   onOpenDownload: (id: string) => void;
   onShowDownloadInFinder: (id: string) => void;
   onCancelDownload: (id: string) => void;
+  onRemoveDownload: (id: string) => void;
   isIncognito?: boolean;
 }
 
 export const AsidePanel: React.FC<AsidePanelProps> = ({
+  activeMode,
+  onModeChange,
   isOpen,
   activeTab,
   downloads,
@@ -28,9 +34,9 @@ export const AsidePanel: React.FC<AsidePanelProps> = ({
   onOpenDownload,
   onShowDownloadInFinder,
   onCancelDownload,
+  onRemoveDownload,
   isIncognito = false,
 }) => {
-  const [activeMode, setActiveMode] = useState<'notes' | 'downloads'>('notes');
 
   // Notes state
   const [noteContent, setNoteContent] = useState('');
@@ -58,13 +64,14 @@ export const AsidePanel: React.FC<AsidePanelProps> = ({
   };
 
   return (
-    <aside className="null-panel null-aside w-[min(340px,100vw)] max-w-full flex-shrink-0 min-w-0 h-full border-l border-[var(--border-subtle)] flex flex-col z-20 select-none">
+    <aside aria-label="유틸리티 패널" data-aside-mode={activeMode} className="null-panel null-aside w-[min(340px,100vw)] max-w-full flex-shrink-0 min-w-0 h-full border-l border-[var(--border-subtle)] flex flex-col z-20 select-none">
       {/* Header */}
       <div className="null-panel-header flex items-center justify-between px-4 h-10 border-b border-[var(--border-subtle)]">
-        <span className="font-semibold text-xs text-[var(--text-primary)] tracking-wide">Aside Drawer</span>
+        <span className="font-semibold text-xs text-[var(--text-primary)] tracking-wide">{activeMode === 'downloads' ? '다운로드' : '메모'}</span>
         <button
           onClick={onClose}
           title="Aside 패널 닫기"
+          aria-label="유틸리티 패널 닫기"
           className="null-icon-button !h-7 !w-7"
         >
           <X className="w-3.5 h-3.5" />
@@ -74,7 +81,7 @@ export const AsidePanel: React.FC<AsidePanelProps> = ({
       {/* Segmented Control Bar */}
       <div className="null-segment-bar flex p-1.5 gap-1 bg-[var(--chrome-bg)] border-b border-[var(--border-divider)] text-xs font-medium">
         <button
-          onClick={() => setActiveMode('notes')}
+          onClick={() => onModeChange('notes')}
           data-active={activeMode === 'notes'}
           className={`null-segment flex-1 flex items-center justify-center gap-1 h-7 transition-colors ${
             activeMode === 'notes'
@@ -86,7 +93,7 @@ export const AsidePanel: React.FC<AsidePanelProps> = ({
           <span className="text-[11px]">메모</span>
         </button>
         <button
-          onClick={() => setActiveMode('downloads')}
+          onClick={() => onModeChange('downloads')}
           data-active={activeMode === 'downloads'}
           className={`null-segment flex-1 flex items-center justify-center gap-1 h-7 transition-colors ${
             activeMode === 'downloads'
@@ -142,29 +149,30 @@ export const AsidePanel: React.FC<AsidePanelProps> = ({
               <div className="space-y-1.5 overflow-y-auto pr-1">
                 {downloads.map((dl) => {
                   const progressPct =
-                    dl.totalBytes > 0 ? Math.round((dl.receivedBytes / dl.totalBytes) * 100) : 0;
+                    dl.totalBytes > 0 ? Math.min(100, Math.round((dl.receivedBytes / dl.totalBytes) * 100)) : 0;
                   return (
                     <div
                       key={dl.id}
+                      data-download-id={dl.id}
                       className="null-list-row p-2.5 bg-[var(--chrome-surface)] border border-transparent rounded-[var(--radius-lg)] space-y-1 text-xs"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium truncate max-w-[170px] text-[var(--text-primary)]" title={dl.filename}>
                           {dl.filename}
                         </span>
-                        <span className="text-[10px] text-[var(--text-muted)] uppercase">{dl.state}</span>
+                        <span className="shrink-0 text-[10px] text-[var(--text-muted)]">{dl.state === 'progressing' ? '진행 중' : dl.state === 'completed' ? '완료' : dl.state === 'cancelled' ? '취소됨' : '중단됨'}</span>
                       </div>
 
                       {dl.state === 'progressing' && (
                         <div className="space-y-1">
-                          <div className="w-full h-1 bg-[var(--chrome-bg)] rounded-full overflow-hidden">
+                          <div role="progressbar" aria-label={`${dl.filename} 다운로드 진행률`} aria-valuenow={dl.totalBytes > 0 ? progressPct : undefined} aria-valuemin={0} aria-valuemax={100} className="w-full h-1 bg-[var(--chrome-bg)] rounded-full overflow-hidden">
                             <div
                               className="h-full bg-[var(--accent)] transition-all duration-200"
-                              style={{ width: `${progressPct}%` }}
+                              style={{ width: `${dl.totalBytes > 0 ? progressPct : 25}%` }}
                             />
                           </div>
                           <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)] font-mono">
-                            <span>{progressPct}%</span>
+                            <span>{dl.totalBytes > 0 ? `${progressPct}%` : '크기 확인 중'}</span>
                             <button
                               onClick={() => onCancelDownload(dl.id)}
                               className="text-[var(--danger)] hover:underline"
@@ -194,6 +202,7 @@ export const AsidePanel: React.FC<AsidePanelProps> = ({
                           </button>
                         </div>
                       )}
+                      {dl.state !== 'progressing' && <button type="button" onClick={() => onRemoveDownload(dl.id)} aria-label={`${dl.filename} 다운로드 기록 삭제`} title="목록에서만 제거" className="flex items-center gap-1 pt-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"><Trash2 className="h-3 w-3" />기록 삭제</button>}
                     </div>
                   );
                 })}
